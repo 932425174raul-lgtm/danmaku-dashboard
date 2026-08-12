@@ -11,6 +11,10 @@ import type {
   LiveTrendBucket,
   StartLiveInput,
 } from '../contracts/ipc-v1/live'
+import {
+  buildHistoryReviewAnalysis,
+  type ActiveSpeakerTrend,
+} from '../domain/history-review-analysis'
 
 type Platform = StartLiveInput['platform']
 type MainView = 'live' | 'history'
@@ -474,47 +478,120 @@ function RankingCard({
   )
 }
 
+type ReviewMetricField =
+  'danmakuCount' | 'activeSpeakerCount' | 'giftCount' | 'superChatCount' | 'popularityPeak'
+
 function ReviewBars({
   buckets,
   field,
   label,
+  unit,
   tone,
   sessionStartedAtMs,
+  unavailable = false,
 }: {
   buckets: HistoryReviewBucketView[]
-  field: 'danmakuCount' | 'activeSpeakerCount'
+  field: ReviewMetricField
   label: string
-  tone: 'warm' | 'cool'
+  unit: string
+  tone: 'red' | 'yellow' | 'green' | 'blue' | 'violet'
   sessionStartedAtMs: number
+  unavailable?: boolean
 }) {
-  const maximum = Math.max(1, ...buckets.map((bucket) => bucket[field]))
+  const values = buckets.map((bucket) => bucket[field])
+  const numericValues = values.filter((value): value is number => value !== null)
+  const maximum = Math.max(1, ...numericValues)
+  const peak = numericValues.length === 0 ? null : Math.max(...numericValues)
   return (
     <div className={`review-chart-row review-chart-${tone}`}>
       <div className="review-chart-label">
         <span>{label}</span>
-        <strong>{maximum.toLocaleString('zh-CN')}峰值</strong>
+        <strong>
+          {unavailable
+            ? '不可用'
+            : peak === null
+              ? '暂无数据'
+              : `${peak.toLocaleString('zh-CN')}${unit}峰值`}
+        </strong>
       </div>
       <div className="review-trend-bars" role="img" aria-label={`${label}分时趋势`}>
-        {buckets.map((bucket) => (
-          <span
-            className={bucket.hasGap ? 'review-trend-gap' : undefined}
-            key={bucket.bucketStartMs}
-            title={`${formatReviewRange(bucket, sessionStartedAtMs)}，${bucket[field].toLocaleString('zh-CN')}${field === 'danmakuCount' ? '条' : '人'}${bucket.hasGap ? '，存在数据缺口' : ''}`}
-          >
-            <i
-              style={{
-                height:
-                  bucket[field] === 0 ? '0%' : `${Math.max(2, (bucket[field] / maximum) * 100)}%`,
-              }}
-            />
-          </span>
-        ))}
+        {unavailable ? (
+          <p>平台匿名协议不提供该指标</p>
+        ) : (
+          buckets.map((bucket) => {
+            const value = bucket[field]
+            return (
+              <span
+                className={bucket.hasGap ? 'review-trend-gap' : undefined}
+                key={bucket.bucketStartMs}
+                title={`${formatReviewRange(bucket, sessionStartedAtMs)}，${value === null ? '无数据' : `${value.toLocaleString('zh-CN')}${unit}`}${bucket.hasGap ? '，存在数据缺口' : ''}`}
+              >
+                {value !== null && (
+                  <i
+                    style={{
+                      height: value === 0 ? '0%' : `${Math.max(2, (value / maximum) * 100)}%`,
+                    }}
+                  />
+                )}
+              </span>
+            )
+          })
+        )}
       </div>
     </div>
   )
 }
 
-function HistoryReviewPanel({ review }: { review: HistoryReviewView }) {
+function describeActiveSpeakerTrend(trend: ActiveSpeakerTrend): {
+  title: string
+  evidence: string
+  nextStep: string
+} {
+  if (trend.direction === 'insufficient') {
+    return {
+      title: '暂不判断活跃发言趋势',
+      evidence: `排除数据缺口后只有${trend.reliableBucketCount}个可用时间格，少于判断所需的4个。`,
+      nextStep: '下场保持连续采集，累积足够时间格后再比较前后变化。',
+    }
+  }
+
+  const firstAverage = trend.firstAverage?.toLocaleString('zh-CN') ?? '0'
+  const secondAverage = trend.secondAverage?.toLocaleString('zh-CN') ?? '0'
+  const change =
+    trend.changePercent === null
+      ? '前半段平均为0人'
+      : `变化${trend.changePercent > 0 ? '+' : ''}${trend.changePercent}%`
+  const evidence = `可用时间格前半段平均${firstAverage}人，后半段平均${secondAverage}人，${change}。`
+  if (trend.direction === 'rising') {
+    return {
+      title: '活跃发言趋势上升',
+      evidence,
+      nextStep:
+        '回看后半段与前半段的内容和互动安排，下场只复现其中一项，观察活跃发言人数是否再次上升。',
+    }
+  }
+  if (trend.direction === 'falling') {
+    return {
+      title: '活跃发言趋势回落',
+      evidence,
+      nextStep:
+        '对照前后半段的主题切换和互动频率，下场选一个时间点增加一次明确提问，再看回落是否收窄。',
+    }
+  }
+  return {
+    title: '活跃发言趋势平稳',
+    evidence,
+    nextStep: '从弹幕最密集时段选一个可重复的互动安排，下场在相近阶段再做一次对照。',
+  }
+}
+
+function HistoryReviewPanel({
+  review,
+  platform,
+}: {
+  review: HistoryReviewView
+  platform: HistorySummaryView['platform']
+}) {
   const averagePerSpeaker =
     review.totals.activeUserCount === 0
       ? null
@@ -523,6 +600,10 @@ function HistoryReviewPanel({ review }: { review: HistoryReviewView }) {
   const peakSpeakers = review.peakActiveSpeakerBucket
   const mostRepeated = review.mostRepeatedDanmaku
   const concentrationPercent = Math.round(review.topThreeDanmakuShare * 100)
+  const analysis = buildHistoryReviewAnalysis(review)
+  const topPeriod = analysis.topPeriods[0] ?? null
+  const speakerTrend = describeActiveSpeakerTrend(analysis.activeSpeakerTrend)
+  const platformMetricsUnavailable = platform === 'douyin'
 
   return (
     <section className="history-review" aria-labelledby="history-review-title">
@@ -537,6 +618,29 @@ function HistoryReviewPanel({ review }: { review: HistoryReviewView }) {
       <p className="review-boundary-note">
         此处统计的是发过弹幕且能匿名去重的活跃发言人数，不是在线观众人数。结论只基于本地保存的互动数据，不包含直播画面和声音内容。
       </p>
+
+      <section className="review-summary" aria-labelledby="review-summary-title">
+        <div>
+          <p className="panel-kicker">数据结论</p>
+          <h3 id="review-summary-title">本场结论</h3>
+        </div>
+        {topPeriod === null ? (
+          <p>本场没有保存普通弹幕，暂时无法判断互动高峰或生成调整方向。</p>
+        ) : (
+          <div>
+            <strong>
+              互动高峰出现在
+              {formatReviewRange(topPeriod.bucket, review.startedAtMs)}
+            </strong>
+            <p>
+              该时段保存了{topPeriod.bucket.danmakuCount}条弹幕，占全场
+              {Math.round(topPeriod.share * 100)}%，有{topPeriod.bucket.activeSpeakerCount}
+              位活跃发言者。
+              {topPeriod.bucket.hasGap && '该时段存在数据缺口，实际互动可能更高。'}
+            </p>
+          </div>
+        )}
+      </section>
 
       <dl className="review-overview">
         <div>
@@ -568,8 +672,8 @@ function HistoryReviewPanel({ review }: { review: HistoryReviewView }) {
       <section className="review-trend" aria-labelledby="review-trend-title">
         <div className="review-section-heading">
           <div>
-            <h3 id="review-trend-title">分时互动趋势</h3>
-            <p>找出观众最愿意参与的环节，再回看当时的主题和表达方式。</p>
+            <h3 id="review-trend-title">五项分时趋势</h3>
+            <p>各图使用独立量纲，用于查看同一时间段内的互动变化。</p>
           </div>
           <span>高度为各自指标相对值</span>
         </div>
@@ -577,21 +681,56 @@ function HistoryReviewPanel({ review }: { review: HistoryReviewView }) {
           buckets={review.buckets}
           field="danmakuCount"
           label="弹幕量"
-          tone="warm"
+          unit="条"
+          tone="red"
           sessionStartedAtMs={review.startedAtMs}
         />
         <ReviewBars
           buckets={review.buckets}
           field="activeSpeakerCount"
           label="活跃发言人数"
-          tone="cool"
+          unit="人"
+          tone="yellow"
           sessionStartedAtMs={review.startedAtMs}
         />
+        <ReviewBars
+          buckets={review.buckets}
+          field="popularityPeak"
+          label="平台热度峰值"
+          unit=""
+          tone="green"
+          sessionStartedAtMs={review.startedAtMs}
+          unavailable={platformMetricsUnavailable}
+        />
+        <ReviewBars
+          buckets={review.buckets}
+          field="giftCount"
+          label="礼物"
+          unit="件"
+          tone="blue"
+          sessionStartedAtMs={review.startedAtMs}
+          unavailable={platformMetricsUnavailable}
+        />
+        <ReviewBars
+          buckets={review.buckets}
+          field="superChatCount"
+          label="醒目留言"
+          unit="条"
+          tone="violet"
+          sessionStartedAtMs={review.startedAtMs}
+          unavailable={platformMetricsUnavailable}
+        />
         <p className="review-trend-legend">
-          <i className="review-legend-warm" />
+          <i className="review-legend-red" />
           弹幕量
-          <i className="review-legend-cool" />
+          <i className="review-legend-yellow" />
           活跃发言人数
+          <i className="review-legend-green" />
+          热度
+          <i className="review-legend-blue" />
+          礼物
+          <i className="review-legend-violet" />
+          醒目留言
           <i className="review-legend-gap" />
           数据缺口
         </p>
@@ -625,6 +764,47 @@ function HistoryReviewPanel({ review }: { review: HistoryReviewView }) {
         </div>
       </dl>
 
+      <section className="review-periods" aria-labelledby="review-periods-title">
+        <div className="review-section-heading">
+          <div>
+            <h3 id="review-periods-title">高峰时段排名</h3>
+            <p>按弹幕量排序，同时对照活跃发言人数和全场占比。</p>
+          </div>
+          <span>TOP 5</span>
+        </div>
+        {analysis.topPeriods.length === 0 ? (
+          <p className="review-empty">本场没有可排名的弹幕时段。</p>
+        ) : (
+          <ol>
+            {analysis.topPeriods.map((period) => (
+              <li key={period.bucket.bucketStartMs}>
+                <span className="review-period-rank">#{period.rank}</span>
+                <div>
+                  <strong>{formatReviewRange(period.bucket, review.startedAtMs)}</strong>
+                  <span>
+                    {period.bucket.hasGap ? '有数据缺口，结果可能低估' : '该时段采集完整'}
+                  </span>
+                </div>
+                <dl>
+                  <div>
+                    <dt>弹幕</dt>
+                    <dd>{period.bucket.danmakuCount}条</dd>
+                  </div>
+                  <div>
+                    <dt>活跃发言</dt>
+                    <dd>{period.bucket.activeSpeakerCount}人</dd>
+                  </div>
+                  <div>
+                    <dt>全场占比</dt>
+                    <dd>{Math.round(period.share * 100)}%</dd>
+                  </div>
+                </dl>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+
       <div className="review-lower-grid">
         <section className="review-repeated" aria-labelledby="review-repeated-title">
           <div className="review-section-heading">
@@ -655,8 +835,8 @@ function HistoryReviewPanel({ review }: { review: HistoryReviewView }) {
         <section className="review-advice" aria-labelledby="review-advice-title">
           <div className="review-section-heading">
             <div>
-              <h3 id="review-advice-title">调整建议</h3>
-              <p>建议都附带可回看的数据依据，不自动推断原因。</p>
+              <h3 id="review-advice-title">下场验证清单</h3>
+              <p>每条都分开数据依据和下场验证，不自动推断原因。</p>
             </div>
           </div>
           <ol>
@@ -664,9 +844,12 @@ function HistoryReviewPanel({ review }: { review: HistoryReviewView }) {
               <li>
                 <strong>建议回看{formatReviewRange(peakDanmaku, review.startedAtMs)}</strong>
                 <p>
-                  当时出现{peakDanmaku.danmakuCount}条弹幕、
-                  {peakDanmaku.activeSpeakerCount}
-                  位活跃发言者。记录当时的主题、话术或互动动作，下场重复观察。
+                  <b>数据依据：</b>当时出现{peakDanmaku.danmakuCount}条弹幕、
+                  {peakDanmaku.activeSpeakerCount}位活跃发言者。
+                </p>
+                <p>
+                  <b>下场验证：</b>
+                  记录当时的主题、话术或互动动作，下场只复现其中一项，再对照弹幕量和活跃发言人数。
                 </p>
               </li>
             ) : (
@@ -677,28 +860,40 @@ function HistoryReviewPanel({ review }: { review: HistoryReviewView }) {
             )}
             {mostRepeated !== null && (
               <li>
-                <strong>确认“{shortenText(mostRepeated.text)}”的语境</strong>
+                <strong>确认「{shortenText(mostRepeated.text)}」的语境</strong>
                 <p>
-                  这条弹幕重复{mostRepeated.count}
-                  次。建议判断它是共鸣、提问还是提醒，程序未读取直播内容，不自动分类。
+                  <b>数据依据：</b>这条弹幕重复{mostRepeated.count}
+                  次，来自{mostRepeated.uniqueUserCount}位已识别发言者。
+                </p>
+                <p>
+                  <b>下场验证：</b>
+                  回看它首次和集中出现时的语境，再判断它是共鸣、提问还是提醒。
                 </p>
               </li>
             )}
-            {review.totals.danmakuCount > 0 && (
+            <li>
+              <strong>{speakerTrend.title}</strong>
+              <p>
+                <b>数据依据：</b>
+                {speakerTrend.evidence}
+              </p>
+              <p>
+                <b>下场验证：</b>
+                {speakerTrend.nextStep}
+              </p>
+            </li>
+            {review.totals.danmakuCount > 0 && review.buckets.length > 3 && (
               <li>
-                <strong>
-                  {review.buckets.length <= 3
-                    ? '结合整场回看'
-                    : concentrationPercent >= 50
-                      ? '复核高峰前后的节奏'
-                      : '按主题切换点逐段复盘'}
-                </strong>
+                <strong>{concentrationPercent >= 50 ? '高峰时段较集中' : '互动分布较均匀'}</strong>
                 <p>
-                  {review.buckets.length <= 3
-                    ? `本场只有${review.buckets.length}个时间格，前三高峰集中度的区分度有限。`
-                    : concentrationPercent >= 50
-                      ? `前三个高峰时格贡献全场${concentrationPercent}%的弹幕，互动较集中。`
-                      : `前三个高峰时格贡献全场${concentrationPercent}%的弹幕，互动分布较均匀。`}
+                  <b>数据依据：</b>前三个高峰时格贡献全场
+                  {concentrationPercent}%的弹幕。
+                </p>
+                <p>
+                  <b>下场验证：</b>
+                  {concentrationPercent >= 50
+                    ? '在相邻低谷时段加入一次同类互动，观察互动是否能更均匀。'
+                    : '保留当前互动频率，下场重点对照最高峰时段的弹幕量。'}
                 </p>
               </li>
             )}
@@ -1430,7 +1625,7 @@ export function App() {
                     正在生成本场复盘…
                   </p>
                 ) : historyReview !== null ? (
-                  <HistoryReviewPanel review={historyReview} />
+                  <HistoryReviewPanel review={historyReview} platform={selectedSession.platform} />
                 ) : null}
                 <form className="history-search" onSubmit={(event) => void searchHistory(event)}>
                   <label htmlFor="history-search">搜索本场弹幕</label>

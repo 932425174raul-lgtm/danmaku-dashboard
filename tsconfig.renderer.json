@@ -16,5 +16,10 @@
     "noEmit": true,
     "composite": true
   },
-  "include": ["src/contracts/**/*.ts", "src/renderer/**/*.ts", "src/renderer/**/*.tsx"]
+  "include": [
+    "src/contracts/**/*.ts",
+    "src/domain/**/*.ts",
+    "src/renderer/**/*.ts",
+    "src/renderer/**/*.tsx"
+  ]
 }

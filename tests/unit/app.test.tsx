@@ -335,11 +335,32 @@ describe('App', () => {
     await userEvent.click(await screen.findByRole('button', { name: /测试直播间/ }))
 
     expect(await screen.findByRole('heading', { name: '直播复盘' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '本场结论' })).toBeInTheDocument()
+    expect(screen.getByText(/互动高峰出现在/)).toBeInTheDocument()
     expect(screen.getByText('活跃发言人数峰值')).toBeInTheDocument()
     expect(screen.getByText('再讲一遍')).toBeInTheDocument()
     expect(screen.getByText(/不是在线观众人数/)).toBeInTheDocument()
     expect(screen.getByText(/存在1次数据缺口/)).toBeInTheDocument()
     expect(screen.getByText(/建议回看/)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '高峰时段排名' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '下场验证清单' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: '平台热度峰值分时趋势' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: '礼物分时趋势' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: '醒目留言分时趋势' })).toBeInTheDocument()
+  })
+
+  it('抖音历史复盘会标明匿名协议不提供的趋势', async () => {
+    installApi({
+      list: vi.fn().mockResolvedValue([{ ...historySession, platform: 'douyin' }]),
+    })
+    render(<App />)
+    await screen.findByText('实时弹幕')
+
+    await userEvent.click(screen.getByRole('button', { name: '历史' }))
+    await userEvent.click(await screen.findByRole('button', { name: /测试直播间/ }))
+
+    const unavailableCharts = screen.getAllByText('平台匿名协议不提供该指标')
+    expect(unavailableCharts).toHaveLength(3)
   })
 
   it('暂停跟随后提示新消息，并可一键回到最新', async () => {

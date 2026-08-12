@@ -1002,6 +1002,7 @@ input::placeholder {
 }
 
 .review-heading h2,
+.review-summary h3,
 .review-section-heading h3,
 .review-section-heading p,
 .review-boundary-note,
@@ -1032,6 +1033,37 @@ input::placeholder {
   color: var(--color-text-muted);
   font-size: var(--font-size-small);
   line-height: 1.7;
+}
+
+.review-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 0.35fr) minmax(0, 1fr);
+  gap: var(--space-4);
+  margin: 0 var(--space-4) var(--space-5);
+  padding: var(--space-4) 0;
+  border-top: var(--line-thin) solid var(--color-line-strong);
+  border-bottom: var(--line-thin) solid var(--color-line-strong);
+}
+
+.review-summary h3 {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-title);
+}
+
+.review-summary > p,
+.review-summary > div:last-child p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-body);
+  line-height: 1.75;
+}
+
+.review-summary > div:last-child strong {
+  display: block;
+  margin-bottom: var(--space-2);
+  color: var(--color-spectrum-yellow);
+  font-size: var(--font-size-lead);
+  line-height: 1.5;
 }
 
 .review-overview {
@@ -1087,6 +1119,7 @@ input::placeholder {
 }
 
 .review-trend,
+.review-periods,
 .review-repeated,
 .review-advice {
   margin: 0 var(--space-4) var(--space-5);
@@ -1136,12 +1169,24 @@ input::placeholder {
   font-weight: 500;
 }
 
-.review-chart-warm .review-chart-label strong {
-  color: var(--color-spectrum-orange);
+.review-chart-red .review-chart-label strong {
+  color: var(--color-spectrum-red);
 }
 
-.review-chart-cool .review-chart-label strong {
+.review-chart-yellow .review-chart-label strong {
+  color: var(--color-spectrum-yellow);
+}
+
+.review-chart-green .review-chart-label strong {
+  color: var(--color-spectrum-green);
+}
+
+.review-chart-blue .review-chart-label strong {
   color: var(--color-spectrum-blue);
+}
+
+.review-chart-violet .review-chart-label strong {
+  color: var(--color-spectrum-violet);
 }
 
 .review-trend-bars {
@@ -1166,11 +1211,32 @@ input::placeholder {
   display: block;
   width: 100%;
   min-height: 2px;
-  background: var(--color-spectrum-orange);
+  background: var(--color-spectrum-red);
 }
 
-.review-chart-cool .review-trend-bars i {
+.review-chart-yellow .review-trend-bars i {
+  background: var(--color-spectrum-yellow);
+}
+
+.review-chart-green .review-trend-bars i {
+  background: var(--color-spectrum-green);
+}
+
+.review-chart-blue .review-trend-bars i {
   background: var(--color-spectrum-blue);
+}
+
+.review-chart-violet .review-trend-bars i {
+  background: var(--color-spectrum-violet);
+}
+
+.review-trend-bars > p {
+  width: 100%;
+  align-self: center;
+  margin: 0;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-caption);
+  text-align: center;
 }
 
 .review-trend-bars > .review-trend-gap {
@@ -1193,12 +1259,24 @@ input::placeholder {
   margin-left: var(--space-2);
 }
 
-.review-trend-legend .review-legend-warm {
-  background: var(--color-spectrum-orange);
+.review-trend-legend .review-legend-red {
+  background: var(--color-spectrum-red);
 }
 
-.review-trend-legend .review-legend-cool {
+.review-trend-legend .review-legend-yellow {
+  background: var(--color-spectrum-yellow);
+}
+
+.review-trend-legend .review-legend-green {
+  background: var(--color-spectrum-green);
+}
+
+.review-trend-legend .review-legend-blue {
   background: var(--color-spectrum-blue);
+}
+
+.review-trend-legend .review-legend-violet {
+  background: var(--color-spectrum-violet);
 }
 
 .review-trend-legend .review-legend-gap {
@@ -1237,6 +1315,71 @@ input::placeholder {
 
 .review-findings > div:nth-child(3) dd {
   color: var(--color-spectrum-violet);
+}
+
+.review-periods ol {
+  margin: 0;
+  padding: 0;
+  border-top: var(--line-thin) solid var(--color-line);
+  list-style: none;
+}
+
+.review-periods li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: var(--line-thin) solid var(--color-line);
+}
+
+.review-period-rank {
+  color: var(--color-spectrum-orange);
+  font-family: var(--font-data);
+  font-size: var(--font-size-label);
+  font-weight: 700;
+}
+
+.review-periods li > div {
+  min-width: 0;
+}
+
+.review-periods li > div strong,
+.review-periods li > div span {
+  display: block;
+}
+
+.review-periods li > div strong {
+  font-family: var(--font-data);
+  font-size: var(--font-size-small);
+}
+
+.review-periods li > div span {
+  margin-top: var(--space-1);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-caption);
+}
+
+.review-periods li > dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.review-periods li > dl > div {
+  padding-left: var(--space-3);
+  border-left: var(--line-thin) solid var(--color-line);
+}
+
+.review-periods dt {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-caption);
+}
+
+.review-periods dd {
+  margin: var(--space-1) 0 0;
+  font-family: var(--font-data);
+  font-size: var(--font-size-small);
 }
 
 .review-lower-grid {
@@ -1308,6 +1451,15 @@ input::placeholder {
   color: var(--color-text-muted);
   font-size: var(--font-size-small);
   line-height: 1.65;
+}
+
+.review-advice li p + p {
+  margin-top: var(--space-2);
+}
+
+.review-advice li b {
+  color: var(--color-text);
+  font-weight: 650;
 }
 
 .review-empty {
@@ -1631,6 +1783,19 @@ input::placeholder {
     gap: 0;
   }
 
+  .review-summary {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+  }
+
+  .review-periods li {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .review-periods li > dl {
+    grid-column: 1 / -1;
+  }
+
   .history-search {
     grid-template-columns: 1fr;
     gap: var(--space-2);
@@ -1702,6 +1867,12 @@ input::placeholder {
 
   .review-findings > div:last-child {
     border-bottom: 0;
+  }
+
+  .review-trend-legend {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 }
 
