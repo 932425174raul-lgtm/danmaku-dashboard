@@ -23,7 +23,7 @@ jobs:
       - run: npm run verify:fast
       - run: npm run make:win
       - run: npm run test:package:win
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: 弹幕看板-windows-x64
           path: out/make/zip/win32/x64/*.zip

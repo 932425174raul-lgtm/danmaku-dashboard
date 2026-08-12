@@ -2,6 +2,8 @@
 
 # 弹幕看板
 
+[![Windows x64](https://github.com/932425174raul-lgtm/danmaku-dashboard/actions/workflows/windows-build.yml/badge.svg)](https://github.com/932425174raul-lgtm/danmaku-dashboard/actions/workflows/windows-build.yml)
+
 弹幕看板是一个运行在macOS与Windows上的本地桌面程序。它可以匿名连接B站或抖音公开直播间，实时显示弹幕与现场指标，同时把历史数据保存到本机SQLite数据库。
 
 这个项目适合需要在直播过程中观察观众反应，或在直播结束后搜索历史弹幕的内容创作者、直播运营者和研究者。它不要求输入平台Cookie，不依赖主播账号，也不把历史上传到外部服务。
@@ -98,7 +100,7 @@ Intel Mac、Windows ARM64和32位Windows当前不在支持范围。
 
 ### 通过DMG安装
 
-1. 从GitHub仓库右侧的Releases区域下载最新的`arm64.dmg`文件。如果仓库还没有发布Release，可以按下文的构建步骤在本机生成。
+1. 从[最新Release](https://github.com/932425174raul-lgtm/danmaku-dashboard/releases/latest)下载`弹幕看板-<version>-arm64.dmg`。也可以按下文步骤在本机生成。
 2. 打开DMG，把「弹幕看板」拖到「应用程序」。
 3. 从「应用程序」打开弹幕看板。
 
@@ -106,7 +108,7 @@ Intel Mac、Windows ARM64和32位Windows当前不在支持范围。
 
 ### Windows便携版
 
-1. 从GitHub Releases下载最新的Windows x64 ZIP。如果仓库还没有发布Release，可以下载Windows Actions中的构建产物，或按下文步骤自行构建。
+1. 从[最新Release](https://github.com/932425174raul-lgtm/danmaku-dashboard/releases/latest)下载`弹幕看板-win32-x64-<version>.zip`。也可以下载Windows Actions中的构建产物，或按下文步骤自行构建。
 2. 把ZIP完整解压到一个可写目录，不要只从压缩包中拖出EXE。
 3. 运行目录中的`弹幕看板.exe`。
 
@@ -269,7 +271,7 @@ BILIBILI_PROBE_DURATION_MS=15000 npm run test:live-protocol -- <公开直播间�
 - 1个SQLite集成测试文件，共4项测试通过。
 - 隐私扫描通过。
 - Apple Silicon `.app`与DMG生成成功，最终产物架构与挂载检查通过。
-- Windows x64便携ZIP交叉生成成功，PE、asar、Fuse和UTF-8文件名静态检查通过；Windows Runner的SQLite双Worker与smoke基准以GitHub Actions结果为准。
+- Windows x64便携ZIP已在GitHub Windows Runner上完成原生构建与运行验收；PE、应用图标、asar、Fuse、UTF-8文件名、SQLite双Worker和两万条smoke基准全部通过。
 - 渲染预览在宽窗口和700px窄窗口中没有水平溢出，浏览器控制台没有运行错误。
 
 持续采集、每秒200条事件和单场百万条事件的发布门槛与执行方式，详见[测试、诊断与脱敏日志规格](./docs/spec/testing-and-observability.md)。
