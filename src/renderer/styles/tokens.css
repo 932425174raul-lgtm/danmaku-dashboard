@@ -1,0 +1,57 @@
+:root {
+  color-scheme: dark;
+  --color-canvas: #0a090c;
+  --color-panel: #111014;
+  --color-panel-raised: #17151a;
+  --color-surface: #1d1a20;
+  --color-line: #2a272e;
+  --color-line-strong: #45404a;
+  --color-text: #f1eee8;
+  --color-text-muted: #aba59d;
+  --color-text-faint: #88817a;
+  --color-signal: #eeeae3;
+  --color-signal-soft: #252127;
+  --color-cyan: #8cc9cf;
+  --color-cyan-soft: #15272a;
+  --color-coral: #e56b61;
+  --color-coral-soft: #351b1a;
+  --color-amber: #d8b25c;
+  --color-amber-soft: #302714;
+  --color-spectrum-red: #e85955;
+  --color-spectrum-orange: #ef8b45;
+  --color-spectrum-yellow: #e9cf63;
+  --color-spectrum-green: #79b875;
+  --color-spectrum-blue: #63a9ce;
+  --color-spectrum-violet: #9a7bc7;
+  --font-body:
+    -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'MiSans',
+    'Microsoft YaHei', sans-serif;
+  --font-data: 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  --font-size-caption: 0.6875rem;
+  --font-size-small: 0.75rem;
+  --font-size-label: 0.8125rem;
+  --font-size-body: 0.9375rem;
+  --font-size-lead: 1.0625rem;
+  --font-size-title: 1.5rem;
+  --font-size-metric: 2rem;
+  --font-size-metric-hero: 2.5rem;
+  --space-0: 0.25rem;
+  --space-1: 0.375rem;
+  --space-2: 0.75rem;
+  --space-3: 1rem;
+  --space-4: 1.5rem;
+  --space-5: 2rem;
+  --space-6: 3rem;
+  --radius-small: 0.25rem;
+  --radius-medium: 0.5rem;
+  --radius-round: 999px;
+  --line-thin: 1px;
+  --control-height: 2.75rem;
+  --topbar-height: 4.75rem;
+  --nav-height: 3rem;
+  --content-max: 96rem;
+  --dashboard-min: 22rem;
+  --transition-fast: 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --transition-standard: 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --shadow-signal: 0 0.75rem 2rem rgb(0 0 0 / 24%);
+}

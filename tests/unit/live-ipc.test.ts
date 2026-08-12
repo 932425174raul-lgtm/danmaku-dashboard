@@ -1,0 +1,53 @@
+import { describe, expect, it } from 'vitest'
+
+import type { LiveSnapshot } from '../../src/contracts/ipc-v1/live'
+import { limitLiveSnapshotForIpc } from '../../src/main/ipc/live-ipc'
+
+describe('live IPC payload', () => {
+  it('只发送最新200条且序列化后不超过256KiB', () => {
+    const snapshot: LiveSnapshot = {
+      apiVersion: 1,
+      platform: 'bilibili',
+      status: 'collecting',
+      roomDisplay: '123456',
+      startedAtMs: 1,
+      elapsedMs: 1,
+      totalDanmaku: 500,
+      danmakuPerMinute: 500,
+      activeSpeakers: 500,
+      lastMessageAtMs: 1,
+      gapCount: 0,
+      currentGapSince: null,
+      lastGap: null,
+      trend: [],
+      keywords: [],
+      activeUsers: [],
+      recentDanmaku: Array.from({ length: 500 }, (_, index) => ({
+        id: String(index),
+        receivedAtMs: index,
+        displayName: `观众${index}`,
+        content: '弹'.repeat(2_000),
+      })),
+      metrics: {
+        giftCount: 0,
+        giftValueMilliCny: 0,
+        superChatCount: 0,
+        superChatValueMilliCny: 0,
+        popularity: null,
+      },
+      unavailable: {
+        gifts: false,
+        superChats: false,
+        popularity: false,
+        viewerCount: true,
+        history: false,
+      },
+      errorCode: null,
+    }
+
+    const limited = limitLiveSnapshotForIpc(snapshot)
+    expect(limited.recentDanmaku.length).toBeLessThanOrEqual(200)
+    expect(limited.recentDanmaku.at(-1)?.id).toBe('499')
+    expect(Buffer.byteLength(JSON.stringify(limited), 'utf8')).toBeLessThanOrEqual(256 * 1_024)
+  })
+})

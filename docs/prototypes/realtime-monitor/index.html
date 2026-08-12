@@ -1,0 +1,1937 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>弹幕看板界面原型</title>
+  <!--
+    PROTOTYPE：三个实时监控界面方案，通过?variant=A|B|C切换。
+    这是一次性界面验证，不是正式Electron渲染进程代码。
+  -->
+  <style>
+    :root {
+      --ink: #080b0d;
+      --ink-2: #0d1215;
+      --panel: #11171a;
+      --panel-2: #161d20;
+      --line: #263034;
+      --line-strong: #39474c;
+      --text: #f2f6f4;
+      --muted: #8e9c9c;
+      --faint: #667272;
+      --signal: #bcff4f;
+      --signal-dark: #263b11;
+      --cyan: #61d8ff;
+      --coral: #ff705c;
+      --amber: #ffc857;
+      --purple: #bba7ff;
+      --radius: 12px;
+      --display: "DIN Alternate", "Avenir Next Condensed", "Alimama ShuHeiTi", "PingFang SC", sans-serif;
+      --body: -apple-system, "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Microsoft YaHei", sans-serif;
+      --mono: "SFMono-Regular", "JetBrains Mono", "Noto Sans SC", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      min-height: 100%;
+      margin: 0;
+      background: var(--ink);
+      color: var(--text);
+      font-family: var(--body);
+    }
+
+    body {
+      min-width: 320px;
+      overflow-x: hidden;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    button {
+      color: inherit;
+    }
+
+    button,
+    [role="button"],
+    input,
+    select {
+      min-height: 40px;
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible {
+      outline: 2px solid var(--signal);
+      outline-offset: 2px;
+    }
+
+    .app {
+      min-height: 100vh;
+      padding-bottom: 92px;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) auto auto;
+      align-items: center;
+      min-height: 68px;
+      padding: 10px 18px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(8, 11, 13, 0.94);
+      backdrop-filter: blur(20px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 36px;
+      height: 36px;
+      place-items: center;
+      border: 1px solid var(--signal);
+      border-radius: 10px 4px 10px 4px;
+      color: var(--signal);
+      font-family: var(--display);
+      font-size: 18px;
+      font-weight: 800;
+      transform: rotate(-2deg);
+    }
+
+    .brand-copy {
+      min-width: 0;
+    }
+
+    .brand-copy strong {
+      display: block;
+      overflow: hidden;
+      font-size: 15px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .brand-copy span {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .top-nav {
+      display: flex;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--ink-2);
+    }
+
+    .top-nav button,
+    .ghost-button,
+    .icon-button {
+      border: 0;
+      border-radius: 7px;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .top-nav button {
+      min-height: 34px;
+      padding: 0 14px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .top-nav button.is-active {
+      background: var(--panel-2);
+      color: var(--text);
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+
+    .top-actions {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: 14px;
+    }
+
+    .icon-button {
+      display: grid;
+      width: 40px;
+      place-items: center;
+      border: 1px solid var(--line);
+      color: var(--muted);
+    }
+
+    .icon-button:hover,
+    .ghost-button:hover {
+      border-color: var(--line-strong);
+      color: var(--text);
+      background: var(--panel);
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 34px;
+      padding: 0 11px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--signal);
+      box-shadow: 0 0 0 4px rgba(188, 255, 79, 0.1);
+    }
+
+    .status-pill.waiting .status-dot {
+      background: var(--amber);
+      box-shadow: 0 0 0 4px rgba(255, 200, 87, 0.1);
+    }
+
+    .status-pill.recovering .status-dot,
+    .status-pill.risk .status-dot {
+      background: var(--coral);
+      box-shadow: 0 0 0 4px rgba(255, 112, 92, 0.1);
+    }
+
+    .status-pill.idle .status-dot {
+      background: var(--faint);
+      box-shadow: none;
+    }
+
+    .tray-popover {
+      position: absolute;
+      top: 48px;
+      right: 0;
+      z-index: 50;
+      display: none;
+      width: 290px;
+      padding: 14px;
+      border: 1px solid var(--line-strong);
+      border-radius: 12px;
+      background: #101518;
+      box-shadow: 0 22px 70px rgba(0, 0, 0, 0.5);
+    }
+
+    .tray-popover.is-open {
+      display: block;
+      animation: pop 180ms ease-out;
+    }
+
+    .tray-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .tray-head strong {
+      font-size: 13px;
+    }
+
+    .tray-popover p {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .tray-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .primary-button,
+    .secondary-button,
+    .danger-button {
+      min-height: 40px;
+      padding: 0 15px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 650;
+    }
+
+    .primary-button {
+      border: 1px solid var(--signal);
+      background: var(--signal);
+      color: #111807;
+    }
+
+    .primary-button:hover {
+      filter: brightness(1.08);
+    }
+
+    .secondary-button {
+      border: 1px solid var(--line-strong);
+      background: var(--panel);
+      color: var(--text);
+    }
+
+    .secondary-button:hover {
+      border-color: var(--muted);
+    }
+
+    .danger-button {
+      border: 1px solid rgba(255, 112, 92, 0.55);
+      background: rgba(255, 112, 92, 0.1);
+      color: #ff9a8b;
+    }
+
+    .scenario-banner {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 44px;
+      padding: 9px 18px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(97, 216, 255, 0.06);
+      color: #b8eaff;
+      font-size: 13px;
+    }
+
+    .scenario-banner.waiting {
+      background: rgba(255, 200, 87, 0.07);
+      color: #ffe2a4;
+    }
+
+    .scenario-banner.recovering,
+    .scenario-banner.risk {
+      background: rgba(255, 112, 92, 0.08);
+      color: #ffb3a7;
+    }
+
+    .scenario-banner.idle {
+      display: none;
+    }
+
+    .scenario-banner strong {
+      color: var(--text);
+    }
+
+    .scenario-banner .spacer {
+      flex: 1;
+    }
+
+    .scenario-banner button {
+      min-height: 30px;
+      padding: 0 10px;
+      border: 1px solid currentColor;
+      border-radius: 7px;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .workspace {
+      min-height: calc(100vh - 112px);
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(15, 20, 23, 0.92);
+    }
+
+    .mobile-subnav {
+      display: none;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 49px;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .panel-head h2,
+    .panel-head h3 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .eyebrow {
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+    }
+
+    .feed-list {
+      overflow: auto;
+      scrollbar-color: var(--line-strong) transparent;
+    }
+
+    .feed-item {
+      display: grid;
+      grid-template-columns: 54px minmax(88px, 142px) 1fr;
+      gap: 10px;
+      align-items: baseline;
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(38, 48, 52, 0.7);
+      font-size: 13px;
+    }
+
+    .feed-item:last-child {
+      border-bottom: 0;
+    }
+
+    .feed-item time {
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: 10px;
+    }
+
+    .feed-user {
+      overflow: hidden;
+      color: var(--cyan);
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .feed-text {
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+    }
+
+    .medal {
+      display: inline-block;
+      margin-right: 6px;
+      padding: 1px 5px;
+      border: 1px solid rgba(187, 167, 255, 0.4);
+      border-radius: 4px;
+      color: var(--purple);
+      font-size: 10px;
+    }
+
+    .metric-number {
+      font-family: var(--display);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .metric-label {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .trend-svg {
+      display: block;
+      width: 100%;
+      height: 112px;
+      overflow: visible;
+    }
+
+    .trend-grid line {
+      stroke: #283136;
+      stroke-dasharray: 2 4;
+    }
+
+    .trend-line {
+      fill: none;
+      stroke: var(--signal);
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 2.4;
+      filter: drop-shadow(0 0 5px rgba(188, 255, 79, 0.2));
+      animation: reveal-line 700ms ease-out both;
+    }
+
+    .trend-area {
+      fill: url(#trend-fill);
+    }
+
+    .gap-band {
+      fill: rgba(255, 112, 92, 0.15);
+      stroke: rgba(255, 112, 92, 0.45);
+      stroke-dasharray: 3 3;
+    }
+
+    .keyword-row,
+    .rank-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-height: 31px;
+      font-size: 12px;
+    }
+
+    .keyword-row span:first-child,
+    .rank-row span:nth-child(2) {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .bar {
+      width: 82px;
+      height: 4px;
+      overflow: hidden;
+      border-radius: 99px;
+      background: var(--line);
+    }
+
+    .bar i {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--cyan);
+    }
+
+    .rank-index {
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: 10px;
+    }
+
+    .value-muted {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 10px;
+    }
+
+    .empty-state {
+      display: grid;
+      min-height: calc(100vh - 68px);
+      place-items: center;
+      padding: 32px 18px 110px;
+    }
+
+    .start-card {
+      width: min(620px, 100%);
+      padding: 34px;
+      border: 1px solid var(--line-strong);
+      border-radius: 18px 6px 18px 6px;
+      background:
+        radial-gradient(circle at 100% 0, rgba(188, 255, 79, 0.08), transparent 38%),
+        var(--panel);
+      box-shadow: 0 30px 100px rgba(0, 0, 0, 0.35);
+    }
+
+    .start-kicker {
+      color: var(--signal);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+    }
+
+    .start-card h1 {
+      max-width: 480px;
+      margin: 15px 0 12px;
+      font-family: var(--display);
+      font-size: clamp(30px, 6vw, 52px);
+      line-height: 1.04;
+      text-wrap: balance;
+    }
+
+    .start-card p {
+      max-width: 500px;
+      margin: 0 0 24px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.75;
+    }
+
+    .room-form {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+    }
+
+    .room-form label {
+      grid-column: 1 / -1;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .room-form input,
+    .search-input {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: var(--ink);
+      color: var(--text);
+    }
+
+    .room-form input {
+      padding: 0 13px;
+    }
+
+    .start-note {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin-top: 16px;
+      color: var(--faint);
+      font-size: 11px;
+      line-height: 1.6;
+    }
+
+    /* 方案A：左右并列控制台 */
+    .variant-a {
+      display: grid;
+      grid-template-columns: minmax(430px, 1.35fr) minmax(360px, 1fr);
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .variant-a .feed-panel {
+      min-height: calc(100vh - 136px);
+    }
+
+    .variant-a .feed-list {
+      height: calc(100vh - 186px);
+      min-height: 430px;
+    }
+
+    .variant-a .dashboard {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      align-content: start;
+    }
+
+    .variant-a .metric-tile {
+      min-height: 94px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+    }
+
+    .variant-a .metric-tile .metric-number {
+      display: block;
+      margin: 7px 0 3px;
+      font-size: 25px;
+    }
+
+    .variant-a .metric-tile.primary {
+      border-color: rgba(188, 255, 79, 0.35);
+      background: linear-gradient(135deg, rgba(188, 255, 79, 0.08), var(--panel) 60%);
+    }
+
+    .variant-a .wide {
+      grid-column: 1 / -1;
+    }
+
+    .chart-card,
+    .list-card {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+    }
+
+    .card-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .card-title strong {
+      font-size: 12px;
+    }
+
+    .card-title span {
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: 9px;
+    }
+
+    .dual-lists {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    /* 方案B：弹幕舞台 */
+    .variant-b {
+      min-height: calc(100vh - 112px);
+      padding: 18px;
+    }
+
+    .variant-b .metric-ribbon {
+      display: grid;
+      grid-template-columns: 1.5fr repeat(5, minmax(100px, 1fr));
+      border: 1px solid var(--line);
+      border-radius: 14px 4px 14px 4px;
+      background: var(--panel);
+    }
+
+    .variant-b .room-identity,
+    .variant-b .ribbon-metric {
+      min-height: 92px;
+      padding: 15px;
+      border-right: 1px solid var(--line);
+    }
+
+    .variant-b .ribbon-metric:last-child {
+      border-right: 0;
+    }
+
+    .variant-b .room-identity strong {
+      display: block;
+      margin-top: 9px;
+      font-family: var(--display);
+      font-size: 20px;
+    }
+
+    .variant-b .ribbon-metric .metric-number {
+      display: block;
+      margin-top: 10px;
+      font-size: 22px;
+    }
+
+    .variant-b .stage {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 310px;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .variant-b .feed-stage {
+      position: relative;
+      min-height: 620px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 5px 16px 5px 16px;
+      background:
+        linear-gradient(180deg, rgba(188, 255, 79, 0.035), transparent 35%),
+        var(--panel);
+    }
+
+    .variant-b .feed-stage::before {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 3px;
+      background: var(--signal);
+      content: "";
+    }
+
+    .variant-b .feed-list {
+      height: 620px;
+      padding: 18px 28px 28px;
+    }
+
+    .variant-b .feed-item {
+      grid-template-columns: 58px minmax(90px, 150px) 1fr;
+      padding: 14px 0;
+      border-color: rgba(57, 71, 76, 0.5);
+      font-size: 15px;
+    }
+
+    .variant-b .side-instruments {
+      display: grid;
+      gap: 10px;
+      align-content: start;
+    }
+
+    .variant-b .compact-chart {
+      padding: 14px;
+      border-left: 3px solid var(--cyan);
+    }
+
+    /* 方案C：信号时间轴 */
+    .variant-c {
+      padding: 12px;
+    }
+
+    .variant-c .signal-header {
+      display: grid;
+      grid-template-columns: minmax(240px, 0.85fr) minmax(0, 2fr);
+      gap: 12px;
+    }
+
+    .variant-c .session-block {
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background:
+        linear-gradient(140deg, rgba(97, 216, 255, 0.08), transparent 55%),
+        var(--panel);
+    }
+
+    .variant-c .session-block h1 {
+      margin: 10px 0 5px;
+      font-family: var(--display);
+      font-size: 26px;
+      line-height: 1.1;
+    }
+
+    .variant-c .session-block p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .variant-c .timeline-board {
+      padding: 14px 18px 10px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel);
+    }
+
+    .variant-c .timeline-metrics {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .variant-c .timeline-metrics .metric-number {
+      display: block;
+      margin-top: 5px;
+      font-size: 21px;
+    }
+
+    .variant-c .lower-deck {
+      display: grid;
+      grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.8fr);
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .variant-c .feed-list {
+      height: 520px;
+    }
+
+    .variant-c .analysis-column {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      align-content: start;
+    }
+
+    .variant-c .analysis-column .wide {
+      grid-column: 1 / -1;
+    }
+
+    /* 历史页 */
+    .history-view {
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr);
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .history-list,
+    .history-detail {
+      min-height: calc(100vh - 104px);
+    }
+
+    .history-search {
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .search-input {
+      padding: 0 12px;
+    }
+
+    .session-row {
+      width: 100%;
+      padding: 14px;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      background: transparent;
+      color: var(--text);
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .session-row:hover,
+    .session-row.is-active {
+      background: rgba(188, 255, 79, 0.06);
+    }
+
+    .session-row strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+
+    .session-row span {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 10px;
+    }
+
+    .history-detail {
+      padding: 20px;
+    }
+
+    .detail-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .detail-head h1 {
+      margin: 6px 0 5px;
+      font-family: var(--display);
+      font-size: 27px;
+    }
+
+    .detail-head p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 9px;
+      margin: 16px 0;
+    }
+
+    .summary-grid > div {
+      padding: 13px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--ink-2);
+    }
+
+    .summary-grid .metric-number {
+      display: block;
+      margin-top: 7px;
+      font-size: 22px;
+    }
+
+    .gap-note {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid rgba(255, 112, 92, 0.35);
+      border-radius: 8px;
+      background: rgba(255, 112, 92, 0.06);
+      color: #ffc0b7;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .detail-toolbar {
+      display: flex;
+      gap: 8px;
+      margin: 16px 0 8px;
+    }
+
+    .detail-toolbar .search-input {
+      flex: 1;
+    }
+
+    .history-feed {
+      border: 1px solid var(--line);
+      border-radius: 9px;
+    }
+
+    .mobile-history-back {
+      display: none;
+    }
+
+    /* 原型控制条 */
+    .prototype-switcher {
+      position: fixed;
+      bottom: 18px;
+      left: 50%;
+      z-index: 100;
+      display: grid;
+      grid-template-columns: 42px minmax(180px, auto) 42px;
+      align-items: center;
+      min-height: 52px;
+      overflow: hidden;
+      border: 1px solid #59666b;
+      border-radius: 999px;
+      background: rgba(8, 11, 13, 0.96);
+      box-shadow: 0 16px 60px rgba(0, 0, 0, 0.55);
+      transform: translateX(-50%);
+      backdrop-filter: blur(16px);
+    }
+
+    .prototype-switcher button {
+      height: 52px;
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      cursor: pointer;
+      font-size: 18px;
+    }
+
+    .prototype-switcher button:hover {
+      background: var(--panel-2);
+      color: var(--signal);
+    }
+
+    .variant-label {
+      padding: 0 18px;
+      border-right: 1px solid var(--line);
+      border-left: 1px solid var(--line);
+      text-align: center;
+    }
+
+    .variant-label strong {
+      display: block;
+      font-size: 12px;
+    }
+
+    .variant-label span {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 9px;
+    }
+
+    .scenario-control {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 99;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 48px;
+      padding: 5px 7px 5px 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      background: rgba(8, 11, 13, 0.96);
+      box-shadow: 0 16px 50px rgba(0, 0, 0, 0.4);
+    }
+
+    .scenario-control label {
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .scenario-control select {
+      min-height: 36px;
+      border: 0;
+      border-radius: 6px;
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 0 8px;
+      font-size: 11px;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      display: none;
+      place-items: center;
+      padding: 18px;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(8px);
+    }
+
+    .modal-backdrop.is-open {
+      display: grid;
+    }
+
+    .modal {
+      width: min(420px, 100%);
+      padding: 22px;
+      border: 1px solid var(--line-strong);
+      border-radius: 14px;
+      background: var(--panel);
+      box-shadow: 0 30px 100px rgba(0, 0, 0, 0.6);
+      animation: pop 180ms ease-out;
+    }
+
+    .modal h2 {
+      margin: 0 0 9px;
+      font-size: 18px;
+    }
+
+    .modal p {
+      margin: 0 0 20px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    @keyframes pop {
+      from {
+        opacity: 0;
+        transform: translateY(5px) scale(0.98);
+      }
+    }
+
+    @keyframes reveal-line {
+      from {
+        opacity: 0;
+        stroke-dasharray: 500;
+        stroke-dashoffset: 500;
+      }
+      to {
+        opacity: 1;
+        stroke-dasharray: 500;
+        stroke-dashoffset: 0;
+      }
+    }
+
+    @media (max-width: 1100px) {
+      .variant-a {
+        grid-template-columns: minmax(390px, 1.1fr) minmax(330px, 0.9fr);
+      }
+
+      .variant-b .metric-ribbon {
+        grid-template-columns: 1.4fr repeat(3, 1fr);
+      }
+
+      .variant-b .ribbon-metric:nth-child(n+5) {
+        display: none;
+      }
+
+      .variant-c .signal-header,
+      .variant-c .lower-deck {
+        grid-template-columns: 1fr;
+      }
+
+      .variant-c .analysis-column {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    @media (max-width: 760px) {
+      button,
+      input,
+      select {
+        min-height: 44px;
+      }
+
+      .topbar {
+        grid-template-columns: 1fr auto;
+        min-height: 106px;
+        padding: 8px 12px;
+      }
+
+      .top-nav {
+        position: static;
+        grid-column: 1 / -1;
+        grid-row: 2;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        width: 100%;
+        margin-top: 8px;
+      }
+
+      .top-actions {
+        grid-column: 2;
+        grid-row: 1;
+        margin-left: 8px;
+      }
+
+      .top-actions .status-pill {
+        display: none;
+      }
+
+      .top-nav button,
+      .primary-button,
+      .secondary-button,
+      .danger-button {
+        min-height: 44px;
+      }
+
+      .icon-button {
+        width: 44px;
+        min-height: 44px;
+      }
+
+      .scenario-banner {
+        align-items: flex-start;
+        padding: 9px 12px;
+        flex-wrap: wrap;
+      }
+
+      .scenario-banner .spacer {
+        display: none;
+      }
+
+      .scenario-banner button {
+        margin-left: 0;
+        min-height: 44px;
+      }
+
+      .mobile-subnav {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+        margin-bottom: 8px;
+        padding: 4px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: var(--ink-2);
+      }
+
+      .mobile-subnav button {
+        min-height: 44px;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+      }
+
+      .mobile-subnav button.is-active {
+        background: var(--panel-2);
+        color: var(--text);
+      }
+
+      .variant-a,
+      .variant-b,
+      .variant-c {
+        display: block;
+        padding: 8px;
+      }
+
+      .variant-a .mobile-subnav,
+      .variant-b .mobile-subnav,
+      .variant-c .mobile-subnav {
+        display: grid;
+      }
+
+      body[data-pane="feed"] .variant-a .dashboard,
+      body[data-pane="feed"] .variant-b .side-instruments,
+      body[data-pane="feed"] .variant-c .analysis-column {
+        display: none;
+      }
+
+      body[data-pane="dashboard"] .variant-a .feed-panel,
+      body[data-pane="dashboard"] .variant-b .feed-stage,
+      body[data-pane="dashboard"] .variant-c .feed-panel {
+        display: none;
+      }
+
+      .variant-a .dashboard,
+      .variant-b .side-instruments,
+      .variant-c .analysis-column {
+        grid-template-columns: 1fr 1fr;
+        margin-top: 8px;
+      }
+
+      .variant-a .feed-panel,
+      .variant-b .feed-stage,
+      .variant-c .feed-panel {
+        min-height: 520px;
+      }
+
+      .variant-a .feed-list,
+      .variant-b .feed-list,
+      .variant-c .feed-list {
+        height: 470px;
+        min-height: 0;
+        padding: 0;
+      }
+
+      .variant-b .metric-ribbon,
+      .variant-b .stage,
+      .variant-c .signal-header,
+      .variant-c .lower-deck {
+        display: block;
+      }
+
+      .variant-b .metric-ribbon {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .variant-b .room-identity {
+        grid-column: 1 / -1;
+      }
+
+      .variant-b .room-identity,
+      .variant-b .ribbon-metric {
+        min-height: 76px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .variant-b .stage {
+        margin-top: 8px;
+      }
+
+      .variant-c .timeline-metrics {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .feed-item,
+      .variant-b .feed-item {
+        grid-template-columns: 48px 88px 1fr;
+        gap: 7px;
+        padding: 10px;
+        font-size: 12px;
+      }
+
+      .history-view {
+        display: block;
+        padding: 8px;
+      }
+
+      .history-list {
+        min-height: auto;
+        margin-bottom: 8px;
+      }
+
+      .history-detail {
+        min-height: 600px;
+        padding: 14px;
+      }
+
+      body[data-history-pane="list"] .history-detail,
+      body[data-history-pane="detail"] .history-list {
+        display: none;
+      }
+
+      .mobile-history-back {
+        display: inline-flex;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+
+      .summary-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .detail-head {
+        display: block;
+      }
+
+      .detail-head .danger-button {
+        margin-top: 14px;
+      }
+
+      .prototype-switcher {
+        bottom: 16px;
+        grid-template-columns: 44px minmax(142px, auto) 44px;
+      }
+
+      .scenario-control {
+        display: none;
+      }
+
+      .variant-label {
+        padding: 0 10px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main id="root" class="app"></main>
+
+  <div class="prototype-switcher" aria-label="原型方案切换">
+    <button type="button" data-action="previous-variant" aria-label="上一个方案">‹</button>
+    <div class="variant-label" aria-live="polite">
+      <strong id="variant-name"></strong>
+      <span>方向键切换方案</span>
+    </div>
+    <button type="button" data-action="next-variant" aria-label="下一个方案">›</button>
+  </div>
+
+  <div class="scenario-control">
+    <label for="scenario-select">原型场景</label>
+    <select id="scenario-select">
+      <option value="collecting">正常采集</option>
+      <option value="waiting">等待开播</option>
+      <option value="recovering">断线恢复</option>
+      <option value="risk">匿名风控</option>
+      <option value="idle">未开始</option>
+    </select>
+  </div>
+
+  <div id="modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal">
+      <h2 id="modal-title">停止本次采集？</h2>
+      <p id="modal-copy">已经收到的弹幕和看板数据会保存在历史会话中。停止后不会自动继续采集。</p>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" data-action="close-modal">取消</button>
+        <button type="button" class="danger-button" data-action="confirm-modal">停止采集</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const variants = {
+      A: 'A · 左右并列',
+      B: 'B · 弹幕舞台',
+      C: 'C · 信号时间轴'
+    };
+
+    const stateMeta = {
+      collecting: {
+        label: '正在采集',
+        banner: '连接正常 · 已保存到本地',
+        detail: '最后收到消息 2秒前'
+      },
+      waiting: {
+        label: '等待开播',
+        banner: '房间尚未开播 · 后台等待中',
+        detail: '下次检查约12秒后'
+      },
+      recovering: {
+        label: '连接恢复中',
+        banner: '连接中断 · 数据缺口从15:28:42开始',
+        detail: '第3次尝试 · 8秒后重试'
+      },
+      risk: {
+        label: '匿名访问受限',
+        banner: '匿名请求暂时受限 · 已有数据保存在本地',
+        detail: '60秒后重试'
+      },
+      idle: {
+        label: '未开始',
+        banner: '',
+        detail: ''
+      }
+    };
+
+    const feed = [
+      ['15:28:41', '北岸纸船', '像素研究 12', '这个转场节奏刚刚好'],
+      ['15:28:39', '晚风观测站', '', '前面的推导我终于跟上了'],
+      ['15:28:36', '小岛电波', '信号员 8', '可以讲一下断线以后怎么算吗'],
+      ['15:28:33', '山谷回声', '', '关键词统计是实时更新的吗'],
+      ['15:28:29', '白桃汽水', '像素研究 19', '这版界面看数据很清楚'],
+      ['15:28:25', '雨后天线', '', '礼物金额会保存到本地吧'],
+      ['15:28:20', '折叠地图', '数据旅人 6', '窄窗口的时候怎么显示'],
+      ['15:28:18', '月台零号', '', '收到，等待开播不会建空记录'],
+      ['15:28:14', '安静矩阵', '像素研究 5', '重连缺口这个提示很重要'],
+      ['15:28:09', '秋日接口', '', '历史里面可以搜索弹幕吗'],
+      ['15:28:05', '蓝色索引', '数据旅人 11', '今天的人气曲线波动很大'],
+      ['15:28:01', '空白终端', '', '继续讲，我在记笔记']
+    ];
+
+    const keywords = [
+      ['界面', 92],
+      ['弹幕', 74],
+      ['重连', 58],
+      ['看板', 45],
+      ['历史', 31]
+    ];
+
+    const activeUsers = [
+      ['北岸纸船', 86],
+      ['白桃汽水', 64],
+      ['蓝色索引', 51],
+      ['小岛电波', 38],
+      ['月台零号', 29]
+    ];
+
+    function params() {
+      return new URLSearchParams(window.location.search);
+    }
+
+    function currentVariant() {
+      const value = (params().get('variant') || 'A').toUpperCase();
+      return variants[value] ? value : 'A';
+    }
+
+    function currentState() {
+      const value = params().get('state') || 'collecting';
+      return stateMeta[value] ? value : 'collecting';
+    }
+
+    function currentView() {
+      return params().get('view') === 'history' ? 'history' : 'live';
+    }
+
+    function currentPane() {
+      return params().get('pane') === 'dashboard' ? 'dashboard' : 'feed';
+    }
+
+    function currentHistoryPane() {
+      return params().get('historyPane') === 'detail' ? 'detail' : 'list';
+    }
+
+    function replaceParams(changes) {
+      const next = params();
+      Object.entries(changes).forEach(([key, value]) => {
+        if (value === null) next.delete(key);
+        else next.set(key, value);
+      });
+      window.history.replaceState({}, '', `${window.location.pathname}?${next.toString()}`);
+      render();
+    }
+
+    function feedMarkup(limit = feed.length) {
+      return feed.slice(0, limit).map(([time, user, medal, text]) => `
+        <div class="feed-item">
+          <time>${time}</time>
+          <span class="feed-user">${user}</span>
+          <span class="feed-text">${medal ? `<i class="medal">${medal}</i>` : ''}${text}</span>
+        </div>
+      `).join('');
+    }
+
+    function keywordMarkup() {
+      return keywords.map(([term, score]) => `
+        <div class="keyword-row">
+          <span>${term}</span>
+          <span class="bar"><i style="width:${score}%"></i></span>
+          <span class="value-muted">${score}</span>
+        </div>
+      `).join('');
+    }
+
+    function rankMarkup() {
+      return activeUsers.map(([name, count], index) => `
+        <div class="rank-row">
+          <span class="rank-index">0${index + 1}</span>
+          <span>${name}</span>
+          <span class="value-muted">${count}条</span>
+        </div>
+      `).join('');
+    }
+
+    function trendMarkup(showGap = true) {
+      return `
+        <svg class="trend-svg" viewBox="0 0 520 112" role="img" aria-label="最近30分钟弹幕趋势">
+          <defs>
+            <linearGradient id="trend-fill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stop-color="#bcff4f" stop-opacity=".22"></stop>
+              <stop offset="100%" stop-color="#bcff4f" stop-opacity="0"></stop>
+            </linearGradient>
+          </defs>
+          <g class="trend-grid">
+            <line x1="0" y1="26" x2="520" y2="26"></line>
+            <line x1="0" y1="57" x2="520" y2="57"></line>
+            <line x1="0" y1="88" x2="520" y2="88"></line>
+          </g>
+          ${showGap ? '<rect class="gap-band" x="292" y="7" width="34" height="91" rx="3"></rect>' : ''}
+          <path class="trend-area" d="M0,90 C35,85 52,72 82,78 S129,47 161,59 S210,36 243,48 S288,24 310,54 S358,43 386,51 S438,26 470,38 S500,20 520,28 L520,104 L0,104 Z"></path>
+          <path class="trend-line" d="M0,90 C35,85 52,72 82,78 S129,47 161,59 S210,36 243,48 S288,24 310,54 S358,43 386,51 S438,26 470,38 S500,20 520,28"></path>
+        </svg>
+      `;
+    }
+
+    function topbar(state, view) {
+      return `
+        <header class="topbar">
+          <div class="brand">
+            <div class="brand-mark">弹</div>
+            <div class="brand-copy">
+              <strong>${state === 'idle' ? '弹幕看板' : '像素工坊的深夜实验室'}</strong>
+              <span>${state === 'idle' ? '本地实时采集' : '房间 24681357 · 已采集 01:42:18'}</span>
+            </div>
+          </div>
+          <nav class="top-nav" aria-label="主导航">
+            <button type="button" class="${view === 'live' ? 'is-active' : ''}" data-action="live">实时</button>
+            <button type="button" class="${view === 'history' ? 'is-active' : ''}" data-action="history">历史</button>
+          </nav>
+          <div class="top-actions">
+            <span class="status-pill ${state}">
+              <i class="status-dot"></i>
+              ${stateMeta[state].label}
+            </span>
+            <button type="button" class="icon-button" data-action="tray" aria-label="打开菜单栏状态">•••</button>
+            <div id="tray-popover" class="tray-popover">
+              <div class="tray-head">
+                <strong>菜单栏后台状态</strong>
+                <span class="status-pill ${state}"><i class="status-dot"></i>${stateMeta[state].label}</span>
+              </div>
+              <p>${state === 'idle' ? '当前没有等待或采集任务。' : `像素工坊的深夜实验室<br>${stateMeta[state].detail}`}</p>
+              <div class="tray-actions">
+                <button type="button" class="secondary-button" data-action="show-window">显示窗口</button>
+                <button type="button" class="danger-button" data-action="${state === 'idle' ? 'quit' : 'stop'}">${state === 'idle' ? '退出应用' : '停止采集'}</button>
+              </div>
+            </div>
+          </div>
+        </header>
+      `;
+    }
+
+    function banner(state) {
+      if (state === 'idle') return '';
+      return `
+        <div class="scenario-banner ${state}" role="status">
+          <strong>${stateMeta[state].label}</strong>
+          <span>${stateMeta[state].banner}</span>
+          <span class="spacer"></span>
+          <span>${stateMeta[state].detail}</span>
+          ${state === 'recovering' || state === 'risk' ? '<button type="button" data-action="retry">立即重试</button>' : ''}
+          <button type="button" data-action="stop">${state === 'waiting' ? '停止等待' : '停止'}</button>
+        </div>
+      `;
+    }
+
+    function emptyMarkup() {
+      return `
+        <section class="empty-state">
+          <div class="start-card">
+            <span class="start-kicker">LOCAL LIVE SIGNAL</span>
+            <h1>把直播间的实时变化留在本机</h1>
+            <p>输入公开B站直播间号或链接。应用会匿名获取弹幕并保存在本地，窗口关闭后仍可继续采集。</p>
+            <form class="room-form" id="room-form">
+              <label for="room-input">直播间号或直播链接</label>
+              <input id="room-input" name="room" autocomplete="off" value="https://live.bilibili.com/24681357">
+              <button class="primary-button" type="submit">开始采集</button>
+            </form>
+            <div class="start-note">
+              <span>●</span>
+              <span>不需要登录或Cookie。若房间尚未开播，应用会进入等待状态，开播前不会生成空历史。</span>
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function metricTile(label, value, note, primary = false) {
+      return `
+        <div class="metric-tile ${primary ? 'primary' : ''}">
+          <span class="metric-label">${label}</span>
+          <strong class="metric-number">${value}</strong>
+          <span class="eyebrow">${note}</span>
+        </div>
+      `;
+    }
+
+    function mobileSubnav() {
+      const pane = currentPane();
+      return `
+        <nav class="mobile-subnav" aria-label="实时内容切换">
+          <button type="button" class="${pane === 'feed' ? 'is-active' : ''}" data-action="mobile-feed">弹幕</button>
+          <button type="button" class="${pane === 'dashboard' ? 'is-active' : ''}" data-action="mobile-dashboard">看板</button>
+        </nav>
+      `;
+    }
+
+    function variantA() {
+      return `
+        <div class="workspace variant-a">
+          ${mobileSubnav()}
+          <section class="panel feed-panel">
+            <div class="panel-head">
+              <h2>实时弹幕</h2>
+              <span class="eyebrow">仅保留最近500条在界面中</span>
+            </div>
+            <div class="feed-list">${feedMarkup()}</div>
+          </section>
+          <aside class="dashboard">
+            ${metricTile('当前热度', '52,680', '峰值 61,204', true)}
+            ${metricTile('弹幕速率', '18.4', '条／分钟')}
+            ${metricTile('弹幕总数', '1,842', '活跃用户 326')}
+            ${metricTile('付费互动', '¥ 826', '礼物 142 · 醒目留言 6')}
+            <section class="chart-card wide">
+              <div class="card-title"><strong>最近30分钟弹幕趋势</strong><span>10秒一格</span></div>
+              ${trendMarkup(true)}
+            </section>
+            <section class="list-card wide">
+              <div class="dual-lists">
+                <div>
+                  <div class="card-title"><strong>高频词</strong><span>TOP 5</span></div>
+                  ${keywordMarkup()}
+                </div>
+                <div>
+                  <div class="card-title"><strong>活跃用户</strong><span>TOP 5</span></div>
+                  ${rankMarkup()}
+                </div>
+              </div>
+            </section>
+          </aside>
+        </div>
+      `;
+    }
+
+    function variantB() {
+      return `
+        <div class="workspace variant-b">
+          ${mobileSubnav()}
+          <section class="metric-ribbon">
+            <div class="room-identity">
+              <span class="metric-label">当前直播间</span>
+              <strong>深夜实验室</strong>
+              <span class="eyebrow">已采集 01:42:18</span>
+            </div>
+            <div class="ribbon-metric"><span class="metric-label">热度</span><strong class="metric-number">52.7K</strong></div>
+            <div class="ribbon-metric"><span class="metric-label">弹幕</span><strong class="metric-number">1,842</strong></div>
+            <div class="ribbon-metric"><span class="metric-label">发言用户</span><strong class="metric-number">326</strong></div>
+            <div class="ribbon-metric"><span class="metric-label">礼物</span><strong class="metric-number">142</strong></div>
+            <div class="ribbon-metric"><span class="metric-label">醒目留言</span><strong class="metric-number">6</strong></div>
+          </section>
+          <div class="stage">
+            <section class="feed-stage">
+              <div class="feed-list">${feedMarkup()}</div>
+            </section>
+            <aside class="side-instruments">
+              <section class="panel compact-chart">
+                <div class="card-title"><strong>信号趋势</strong><span>30 MIN</span></div>
+                ${trendMarkup(true)}
+              </section>
+              <section class="list-card">
+                <div class="card-title"><strong>现在都在聊</strong><span>关键词</span></div>
+                ${keywordMarkup()}
+              </section>
+              <section class="list-card">
+                <div class="card-title"><strong>持续发言</strong><span>用户</span></div>
+                ${rankMarkup()}
+              </section>
+            </aside>
+          </div>
+        </div>
+      `;
+    }
+
+    function variantC() {
+      return `
+        <div class="workspace variant-c">
+          ${mobileSubnav()}
+          <section class="signal-header">
+            <div class="session-block">
+              <span class="eyebrow">ROOM 24681357</span>
+              <h1>像素工坊的<br>深夜实验室</h1>
+              <p>连接正常 · 已采集 01:42:18</p>
+            </div>
+            <div class="timeline-board">
+              <div class="timeline-metrics">
+                <div><span class="metric-label">热度</span><strong class="metric-number">52,680</strong></div>
+                <div><span class="metric-label">弹幕／分</span><strong class="metric-number">18.4</strong></div>
+                <div><span class="metric-label">发言用户</span><strong class="metric-number">326</strong></div>
+                <div><span class="metric-label">礼物价值</span><strong class="metric-number">¥ 526</strong></div>
+                <div><span class="metric-label">醒目留言</span><strong class="metric-number">¥ 300</strong></div>
+              </div>
+              ${trendMarkup(true)}
+            </div>
+          </section>
+          <section class="lower-deck">
+            <div class="panel feed-panel">
+              <div class="panel-head"><h2>消息流</h2><span class="eyebrow">接收时间排序</span></div>
+              <div class="feed-list">${feedMarkup()}</div>
+            </div>
+            <aside class="analysis-column">
+              <section class="list-card wide">
+                <div class="card-title"><strong>会话摘要</strong><span>LIVE</span></div>
+                <div class="dual-lists">
+                  <div>${keywordMarkup()}</div>
+                  <div>${rankMarkup()}</div>
+                </div>
+              </section>
+              ${metricTile('弹幕总数', '1,842', '较前30分钟 +12%')}
+              ${metricTile('最后消息', '2秒前', '15:28:41')}
+              ${metricTile('数据缺口', '01', '累计 00:00:34')}
+              ${metricTile('峰值热度', '61,204', '15:17:20')}
+            </aside>
+          </section>
+        </div>
+      `;
+    }
+
+    function historyMarkup() {
+      return `
+        <div class="workspace history-view">
+          <aside class="panel history-list">
+            <div class="panel-head"><h2>历史会话</h2><span class="eyebrow">共18场</span></div>
+            <div class="history-search">
+              <input class="search-input" aria-label="筛选历史会话" placeholder="按房间标题筛选">
+            </div>
+            <button type="button" class="session-row is-active" data-action="history-detail">
+              <strong>像素工坊的深夜实验室</strong>
+              <span>今天 13:46 · 01:42:18 · 正常结束</span>
+            </button>
+            <button type="button" class="session-row" data-action="history-detail">
+              <strong>数据产品周末问答</strong>
+              <span>7月27日 20:01 · 02:16:43 · 正常结束</span>
+            </button>
+            <button type="button" class="session-row" data-action="history-detail">
+              <strong>凌晨接口观察室</strong>
+              <span>7月25日 23:12 · 00:48:09 · 异常中断</span>
+            </button>
+          </aside>
+          <section class="panel history-detail">
+            <button type="button" class="secondary-button mobile-history-back" data-action="history-list">返回历史列表</button>
+            <header class="detail-head">
+              <div>
+                <span class="eyebrow">房间 24681357 · 正常结束</span>
+                <h1>像素工坊的深夜实验室</h1>
+                <p>2026年7月29日 13:46至15:28 · 采集1小时42分18秒</p>
+              </div>
+              <button type="button" class="danger-button" data-action="delete">删除整场</button>
+            </header>
+            <div class="summary-grid">
+              <div><span class="metric-label">弹幕</span><strong class="metric-number">1,842</strong></div>
+              <div><span class="metric-label">发言用户</span><strong class="metric-number">326</strong></div>
+              <div><span class="metric-label">礼物</span><strong class="metric-number">142</strong></div>
+              <div><span class="metric-label">醒目留言</span><strong class="metric-number">6</strong></div>
+              <div><span class="metric-label">峰值热度</span><strong class="metric-number">61.2K</strong></div>
+            </div>
+            <div class="gap-note">
+              <strong>数据缺口</strong>
+              <span>15:12:08至15:12:42连接中断，共34秒。这段时间没有可靠事件，趋势图不会按零事件计算。</span>
+            </div>
+            <div class="detail-toolbar">
+              <input class="search-input" aria-label="搜索本场弹幕" placeholder="搜索本场弹幕或昵称">
+              <button type="button" class="secondary-button">搜索</button>
+            </div>
+            <div class="history-feed">${feedMarkup(8)}</div>
+          </section>
+        </div>
+      `;
+    }
+
+    function render() {
+      const variant = currentVariant();
+      const state = currentState();
+      const view = currentView();
+      const pane = currentPane();
+      const historyPane = currentHistoryPane();
+      const root = document.getElementById('root');
+
+      document.body.dataset.variant = variant;
+      document.body.dataset.state = state;
+      document.body.dataset.pane = pane;
+      document.body.dataset.historyPane = historyPane;
+      document.getElementById('variant-name').textContent = variants[variant];
+      document.getElementById('scenario-select').value = state;
+
+      let body;
+      if (state === 'idle' && view === 'live') body = emptyMarkup();
+      else if (view === 'history') body = historyMarkup();
+      else if (variant === 'A') body = variantA();
+      else if (variant === 'B') body = variantB();
+      else body = variantC();
+
+      root.innerHTML = `${topbar(state, view)}${banner(state)}${body}`;
+      bindForm();
+    }
+
+    function bindForm() {
+      const form = document.getElementById('room-form');
+      if (!form) return;
+      form.addEventListener('submit', event => {
+        event.preventDefault();
+        replaceParams({state: 'waiting', view: 'live'});
+      });
+    }
+
+    function cycleVariant(direction) {
+      const keys = Object.keys(variants);
+      const index = keys.indexOf(currentVariant());
+      const next = keys[(index + direction + keys.length) % keys.length];
+      replaceParams({variant: next});
+    }
+
+    function openModal(kind) {
+      const modal = document.getElementById('modal');
+      const title = document.getElementById('modal-title');
+      const copy = document.getElementById('modal-copy');
+      const confirm = modal.querySelector('[data-action="confirm-modal"]');
+
+      modal.dataset.kind = kind;
+      if (kind === 'delete') {
+        title.textContent = '删除整场历史？';
+        copy.textContent = '将删除2026年7月29日的像素工坊的深夜实验室，包括本场弹幕、礼物、醒目留言和会话摘要。开始后不能撤销。';
+        confirm.textContent = '删除整场';
+      } else {
+        title.textContent = currentState() === 'waiting' ? '停止等待开播？' : '停止本次采集？';
+        copy.textContent = currentState() === 'waiting'
+          ? '像素工坊的深夜实验室将停止等待，本次不会生成历史会话。'
+          : '像素工坊的深夜实验室将停止采集，已接收数据会保存在历史会话中。';
+        confirm.textContent = currentState() === 'waiting' ? '停止等待' : '停止采集';
+      }
+      modal.classList.add('is-open');
+      modal.querySelector('.secondary-button').focus();
+    }
+
+    function closeModal() {
+      document.getElementById('modal').classList.remove('is-open');
+    }
+
+    document.addEventListener('click', event => {
+      const target = event.target.closest('[data-action]');
+      if (!target) return;
+      const action = target.dataset.action;
+
+      if (action === 'previous-variant') cycleVariant(-1);
+      if (action === 'next-variant') cycleVariant(1);
+      if (action === 'live') replaceParams({view: 'live'});
+      if (action === 'history') replaceParams({view: 'history'});
+      if (action === 'mobile-feed') replaceParams({pane: 'feed'});
+      if (action === 'mobile-dashboard') replaceParams({pane: 'dashboard'});
+      if (action === 'history-detail') replaceParams({historyPane: 'detail'});
+      if (action === 'history-list') replaceParams({historyPane: 'list'});
+      if (action === 'tray') document.getElementById('tray-popover')?.classList.toggle('is-open');
+      if (action === 'stop') openModal('stop');
+      if (action === 'delete') openModal('delete');
+      if (action === 'close-modal') closeModal();
+      if (action === 'retry') replaceParams({state: 'collecting'});
+      if (action === 'show-window') document.getElementById('tray-popover')?.classList.remove('is-open');
+      if (action === 'confirm-modal') {
+        const kind = document.getElementById('modal').dataset.kind;
+        closeModal();
+        if (kind === 'delete') replaceParams({view: 'history'});
+        else replaceParams({state: 'idle', view: 'live'});
+      }
+    });
+
+    document.addEventListener('keydown', event => {
+      const tag = event.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || event.target.isContentEditable) return;
+      if (event.key === 'ArrowLeft') cycleVariant(-1);
+      if (event.key === 'ArrowRight') cycleVariant(1);
+      if (event.key === 'Escape') closeModal();
+    });
+
+    document.getElementById('scenario-select').addEventListener('change', event => {
+      replaceParams({state: event.target.value, view: 'live'});
+    });
+
+    render();
+  </script>
+</body>
+</html>

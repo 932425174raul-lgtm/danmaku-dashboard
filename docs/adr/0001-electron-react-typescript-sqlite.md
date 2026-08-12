@@ -1,0 +1,3 @@
+# 使用Electron、React、TypeScript与SQLite
+
+第一版采用Electron承载macOS桌面应用及后台采集进程，React负责实时界面，TypeScript统一B站协议与应用代码，SQLite保存本地采集数据。该方案接受超过100MB的安装包体积，以换取后台运行、系统托盘、WebSocket处理和Apple Silicon打包的较低开发风险；第一版不选择需要额外Rust集成的Tauri。

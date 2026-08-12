@@ -1,0 +1,17 @@
+.DS_Store
+node_modules/
+.vite/
+.electron-zip-cache/
+out/
+coverage/
+playwright-report/
+test-results/
+artifacts/
+*.app
+*.dmg
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.log
+*.tsbuildinfo

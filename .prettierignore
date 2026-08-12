@@ -1,0 +1,10 @@
+.git/
+.vite/
+node_modules/
+out/
+artifacts/
+coverage/
+docs/
+*.md
+*.icns
+*.png
