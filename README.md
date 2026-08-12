@@ -93,14 +93,14 @@
 
 | 系统 | 架构 | 发布产物 |
 | --- | --- | --- |
-| macOS 13.0或更高版本 | Apple Silicon | `弹幕看板-<version>-arm64.dmg` |
-| Windows 10或Windows 11 | x64 | `弹幕看板-win32-x64-<version>.zip` |
+| macOS 13.0或更高版本 | Apple Silicon | `danmaku-dashboard-<version>-macos-arm64.dmg` |
+| Windows 10或Windows 11 | x64 | `danmaku-dashboard-<version>-windows-x64.zip` |
 
 Intel Mac、Windows ARM64和32位Windows当前不在支持范围。
 
 ### 通过DMG安装
 
-1. 从[最新Release](https://github.com/932425174raul-lgtm/danmaku-dashboard/releases/latest)下载`弹幕看板-<version>-arm64.dmg`。也可以按下文步骤在本机生成。
+1. 从[最新Release](https://github.com/932425174raul-lgtm/danmaku-dashboard/releases/latest)下载`danmaku-dashboard-<version>-macos-arm64.dmg`。也可以按下文步骤在本机生成。
 2. 打开DMG，把「弹幕看板」拖到「应用程序」。
 3. 从「应用程序」打开弹幕看板。
 
@@ -108,7 +108,7 @@ Intel Mac、Windows ARM64和32位Windows当前不在支持范围。
 
 ### Windows便携版
 
-1. 从[最新Release](https://github.com/932425174raul-lgtm/danmaku-dashboard/releases/latest)下载`弹幕看板-win32-x64-<version>.zip`。也可以下载Windows Actions中的构建产物，或按下文步骤自行构建。
+1. 从[最新Release](https://github.com/932425174raul-lgtm/danmaku-dashboard/releases/latest)下载`danmaku-dashboard-<version>-windows-x64.zip`。也可以下载Windows Actions中的构建产物，或按下文步骤自行构建。
 2. 把ZIP完整解压到一个可写目录，不要只从压缩包中拖出EXE。
 3. 运行目录中的`弹幕看板.exe`。
 
