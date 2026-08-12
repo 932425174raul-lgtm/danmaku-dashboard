@@ -17,6 +17,35 @@ export interface LiveDataGap {
   recovered: boolean
 }
 
+export interface LiveTrendBucket {
+  bucketStartMs: number
+  danmakuCount: number
+  activeSpeakerEstimate: number
+  giftCount: number
+  superChatCount: number
+  popularityPeak: number | null
+  hasGap: boolean
+}
+
+export interface LiveSegmentMetric {
+  current: number | null
+  previous: number | null
+  changePercent: number | null
+}
+
+export interface LiveSegmentMonitor {
+  windowSeconds: number
+  status: 'starting' | 'warming' | 'steady' | 'cooling' | 'quiet' | 'gap'
+  hasGap: boolean
+  metrics: {
+    danmaku: LiveSegmentMetric
+    activeSpeakers: LiveSegmentMetric
+    gifts: LiveSegmentMetric
+    superChats: LiveSegmentMetric
+    popularity: LiveSegmentMetric
+  }
+}
+
 export interface LiveSnapshot {
   apiVersion: 1
   platform: 'bilibili' | 'douyin'
@@ -31,7 +60,8 @@ export interface LiveSnapshot {
   gapCount: number
   currentGapSince: number | null
   lastGap: LiveDataGap | null
-  trend: Array<{ bucketStartMs: number; danmakuCount: number; hasGap: boolean }>
+  trend: LiveTrendBucket[]
+  segment: LiveSegmentMonitor
   keywords: Array<{ term: string; estimatedCount: number }>
   activeUsers: Array<{ displayName: string; danmakuCount: number }>
   recentDanmaku: LiveDanmakuItem[]

@@ -41,6 +41,16 @@ describe('LiveProjection', () => {
     expect(projection.snapshot().elapsedMs).toBe(10_000)
   })
 
+  it('等待开播期间不把没有弹幕判断为互动安静', () => {
+    let now = 0
+    const projection = new LiveProjection(() => now)
+    projection.start('123456')
+    projection.markWaiting()
+    now = 10 * 60_000
+
+    expect(projection.snapshot().segment.status).toBe('starting')
+  })
+
   it('使用固定内存的基数估算去重活跃用户', () => {
     const projection = new LiveProjection(() => 1_000)
     projection.start('123456')
@@ -93,5 +103,104 @@ describe('LiveProjection', () => {
       },
     })
     expect(projection.snapshot().trend.every((bucket) => bucket.hasGap)).toBe(true)
+  })
+
+  it('按10秒固定容量记录五项趋势并估算短时活跃发言人数', () => {
+    let now = 10_000
+    const projection = new LiveProjection(() => now)
+
+    projection.start('123456')
+    projection.markCollecting()
+    projection.ingest({
+      displayName: '观众甲',
+      content: '第一条',
+      localUserKey: 'local-a',
+      receivedAtMs: now,
+    })
+    projection.ingest({
+      displayName: '观众乙',
+      content: '第二条',
+      localUserKey: 'local-b',
+      receivedAtMs: now,
+    })
+    projection.ingestGift({ quantity: 3, totalValueMilliCny: 12_000, receivedAtMs: now })
+    projection.ingestSuperChat({ valueMilliCny: 30_000, receivedAtMs: now })
+    projection.updatePopularity(88_000, now)
+    projection.updatePopularity(96_000, now)
+
+    expect(projection.snapshot().trend.at(-1)).toMatchObject({
+      bucketStartMs: 10_000,
+      danmakuCount: 2,
+      activeSpeakerEstimate: 2,
+      giftCount: 3,
+      superChatCount: 1,
+      popularityPeak: 96_000,
+      hasGap: false,
+    })
+
+    now += 31 * 60_000
+    expect(projection.snapshot().trend).toHaveLength(180)
+  })
+
+  it('用前后等长时间段判断升温、回落与数据缺口', () => {
+    let now = 0
+    const projection = new LiveProjection(() => now)
+
+    projection.start('123456')
+    projection.markCollecting()
+    for (let bucket = 0; bucket < 12; bucket += 1) {
+      now = bucket * 10_000
+      const count = bucket < 6 ? 1 : 3
+      for (let index = 0; index < count; index += 1) {
+        projection.ingest({
+          displayName: `观众${index}`,
+          content: '互动',
+          localUserKey: `local-${bucket}-${index}`,
+          receivedAtMs: now,
+        })
+      }
+    }
+
+    expect(projection.snapshot().segment).toMatchObject({
+      windowSeconds: 60,
+      status: 'warming',
+      hasGap: false,
+      metrics: {
+        danmaku: { current: 18, previous: 6, changePercent: 200 },
+        activeSpeakers: { current: 18, previous: 6, changePercent: 200 },
+      },
+    })
+
+    now = 120_000
+    projection.markRecovering('WEBSOCKET_DISCONNECTED')
+    expect(projection.snapshot().segment.status).toBe('gap')
+    expect(projection.snapshot().segment.hasGap).toBe(true)
+  })
+
+  it('数据不足、互动回落和当前安静使用不同状态', () => {
+    let coolingNow = 0
+    const cooling = new LiveProjection(() => coolingNow)
+    cooling.start('123456')
+    expect(cooling.snapshot().segment.status).toBe('starting')
+    cooling.markCollecting()
+    for (let bucket = 0; bucket < 12; bucket += 1) {
+      coolingNow = bucket * 10_000
+      const count = bucket < 6 ? 4 : 1
+      for (let index = 0; index < count; index += 1) {
+        cooling.ingest({ displayName: '观众', content: '互动', receivedAtMs: coolingNow })
+      }
+    }
+    expect(cooling.snapshot().segment.status).toBe('cooling')
+
+    let quietNow = 0
+    const quiet = new LiveProjection(() => quietNow)
+    quiet.start('123456')
+    quiet.markCollecting()
+    for (let bucket = 0; bucket < 6; bucket += 1) {
+      quietNow = bucket * 10_000
+      quiet.ingest({ displayName: '观众', content: '互动', receivedAtMs: quietNow })
+    }
+    quietNow = 110_000
+    expect(quiet.snapshot().segment.status).toBe('quiet')
   })
 })

@@ -5,8 +5,10 @@ import type {
   HistoryReviewBucketView,
   HistoryReviewView,
   HistorySummaryView,
+  LiveSegmentMetric,
   LiveSnapshot,
   LiveStatus,
+  LiveTrendBucket,
   StartLiveInput,
 } from '../contracts/ipc-v1/live'
 
@@ -159,35 +161,281 @@ function MetricCard({
   )
 }
 
-function TrendChart({ trend }: { trend: LiveSnapshot['trend'] }) {
-  const max = Math.max(1, ...trend.map((bucket) => bucket.danmakuCount))
+interface MonitorMinute {
+  bucketStartMs: number
+  danmakuCount: number
+  activeSpeakerEstimate: number
+  giftCount: number
+  superChatCount: number
+  popularityPeak: number | null
+  hasGap: boolean
+}
+
+type MonitorMetricKey = Exclude<keyof MonitorMinute, 'bucketStartMs' | 'hasGap'>
+
+const segmentStatusContent: Record<
+  LiveSnapshot['segment']['status'],
+  { title: string; detail: string }
+> = {
+  starting: { title: '互动数据积累中', detail: '满2分钟后开始比较前后两段弹幕变化。' },
+  warming: { title: '互动升温', detail: '当前段弹幕量比前一段明显增加。' },
+  steady: { title: '互动平稳', detail: '当前段弹幕量与前一段接近。' },
+  cooling: { title: '互动回落', detail: '当前段弹幕量比前一段明显减少。' },
+  quiet: { title: '当前较安静', detail: '当前段还没有收到普通弹幕。' },
+  gap: { title: '趋势判断暂停', detail: '对比时间内存在数据缺口，暂不判断互动变化。' },
+}
+
+function aggregateTrendByMinute(trend: LiveTrendBucket[]): MonitorMinute[] {
+  const minutes = new Map<number, MonitorMinute>()
+  for (const bucket of trend) {
+    const bucketStartMs = Math.floor(bucket.bucketStartMs / 60_000) * 60_000
+    const minute = minutes.get(bucketStartMs) ?? {
+      bucketStartMs,
+      danmakuCount: 0,
+      activeSpeakerEstimate: 0,
+      giftCount: 0,
+      superChatCount: 0,
+      popularityPeak: null,
+      hasGap: false,
+    }
+    minute.danmakuCount += bucket.danmakuCount
+    minute.activeSpeakerEstimate = Math.max(
+      minute.activeSpeakerEstimate,
+      bucket.activeSpeakerEstimate,
+    )
+    minute.giftCount += bucket.giftCount
+    minute.superChatCount += bucket.superChatCount
+    if (bucket.popularityPeak !== null) {
+      minute.popularityPeak = Math.max(minute.popularityPeak ?? 0, bucket.popularityPeak)
+    }
+    minute.hasGap ||= bucket.hasGap
+    minutes.set(bucketStartMs, minute)
+  }
+  return [...minutes.values()]
+    .sort((left, right) => left.bucketStartMs - right.bucketStartMs)
+    .slice(-30)
+}
+
+function formatSegmentWindow(windowSeconds: number): string {
+  if (windowSeconds === 0) return '当前时段'
+  if (windowSeconds % 60 === 0) return `当前${windowSeconds / 60}分钟`
+  return `当前${windowSeconds}秒`
+}
+
+function formatSegmentChange(metric: LiveSegmentMetric, hasGap: boolean): string {
+  if (hasGap) return '缺口影响对比'
+  if (metric.previous === null) return '等待前一段数据'
+  if (metric.previous === 0 && (metric.current ?? 0) > 0) return '前一段为0'
+  if (metric.changePercent === null) return '暂无对比'
+  if (metric.changePercent === 0) return '与前一段相同'
+  return `${metric.changePercent > 0 ? '+' : ''}${metric.changePercent}%`
+}
+
+function SegmentMetricItem({
+  label,
+  metric,
+  hasGap,
+  unavailable = false,
+  approximate = false,
+}: {
+  label: string
+  metric: LiveSegmentMetric
+  hasGap: boolean
+  unavailable?: boolean
+  approximate?: boolean
+}) {
+  const value = metric.current
   return (
-    <section className="signal-card trend-card" aria-labelledby="trend-title">
-      <div className="section-heading">
-        <h3 id="trend-title">最近30分钟趋势</h3>
-        <span>10秒一格</span>
+    <div>
+      <dt>{label}</dt>
+      <dd>
+        {unavailable || value === null
+          ? '不可用'
+          : `${approximate ? '约' : ''}${value.toLocaleString('zh-CN')}`}
+      </dd>
+      <span>{unavailable ? '匿名协议不提供' : formatSegmentChange(metric, hasGap)}</span>
+    </div>
+  )
+}
+
+function SegmentMonitor({
+  segment,
+  unavailable,
+}: {
+  segment: LiveSnapshot['segment']
+  unavailable: LiveSnapshot['unavailable']
+}) {
+  const content = segmentStatusContent[segment.status]
+  return (
+    <section
+      className={`segment-monitor segment-status-${segment.status}`}
+      aria-labelledby="segment-monitor-title"
+    >
+      <div className="segment-monitor-heading">
+        <div>
+          <p>{formatSegmentWindow(segment.windowSeconds)}</p>
+          <h3 id="segment-monitor-title">{content.title}</h3>
+          <span>{content.detail}</span>
+        </div>
+        <i aria-hidden="true" />
       </div>
-      <div className="trend-bars" role="img" aria-label="最近30分钟弹幕数量趋势">
-        {trend.length === 0 ? (
-          <p className="signal-empty">收到弹幕后生成趋势</p>
+      <dl className="segment-metrics">
+        <SegmentMetricItem label="弹幕" metric={segment.metrics.danmaku} hasGap={segment.hasGap} />
+        <SegmentMetricItem
+          label="活跃发言"
+          metric={segment.metrics.activeSpeakers}
+          hasGap={segment.hasGap}
+          approximate
+        />
+        <SegmentMetricItem
+          label="热度峰值"
+          metric={segment.metrics.popularity}
+          hasGap={segment.hasGap}
+          unavailable={unavailable.popularity}
+        />
+        <SegmentMetricItem
+          label="礼物"
+          metric={segment.metrics.gifts}
+          hasGap={segment.hasGap}
+          unavailable={unavailable.gifts}
+        />
+        <SegmentMetricItem
+          label="醒目留言"
+          metric={segment.metrics.superChats}
+          hasGap={segment.hasGap}
+          unavailable={unavailable.superChats}
+        />
+      </dl>
+    </section>
+  )
+}
+
+function TrendMetricChart({
+  minutes,
+  metric,
+  title,
+  unit,
+  tone,
+  unavailable = false,
+  approximate = false,
+}: {
+  minutes: MonitorMinute[]
+  metric: MonitorMetricKey
+  title: string
+  unit: string
+  tone: 'red' | 'yellow' | 'green' | 'blue' | 'violet'
+  unavailable?: boolean
+  approximate?: boolean
+}) {
+  const values = minutes.map((minute) => minute[metric])
+  const numericValues = values.filter((value): value is number => value !== null)
+  const maximum = Math.max(1, ...numericValues)
+  const latest = values.at(-1)
+  return (
+    <section className={`monitor-chart monitor-tone-${tone}`}>
+      <div className="monitor-chart-heading">
+        <div>
+          <h4>{title}</h4>
+          <span>{unit}</span>
+        </div>
+        <strong>
+          {unavailable
+            ? '不可用'
+            : latest === undefined || latest === null
+              ? '暂无'
+              : `${approximate ? '约' : ''}${latest.toLocaleString('zh-CN')}`}
+        </strong>
+      </div>
+      <div className="monitor-bars" role="img" aria-label={`最近30分钟${title}趋势`}>
+        {unavailable ? (
+          <p>匿名协议暂不提供</p>
+        ) : minutes.length === 0 ? (
+          <p>收到数据后生成趋势</p>
         ) : (
-          trend.map((bucket, index) => {
-            const spectrumBand = Math.min(5, Math.floor((index * 6) / trend.length))
+          minutes.map((minute) => {
+            const value = minute[metric]
             return (
               <span
-                className={bucket.hasGap ? 'trend-gap' : `trend-spectrum-${spectrumBand}`}
-                key={bucket.bucketStartMs}
-                title={`${formatClock(bucket.bucketStartMs)}，${bucket.danmakuCount}条${bucket.hasGap ? '，数据缺口' : ''}`}
-                style={{ height: `${Math.max(8, (bucket.danmakuCount / max) * 100)}%` }}
-              />
+                className={minute.hasGap ? 'monitor-gap' : undefined}
+                key={minute.bucketStartMs}
+                title={`${formatClock(minute.bucketStartMs)}，${value === null ? '无数据' : `${approximate ? '约' : ''}${value.toLocaleString('zh-CN')}${unit}`}${minute.hasGap ? '，存在数据缺口' : ''}`}
+              >
+                {value !== null && (
+                  <i
+                    style={{
+                      height: value === 0 ? '0%' : `${Math.max(3, (value / maximum) * 100)}%`,
+                    }}
+                  />
+                )}
+              </span>
             )
           })
         )}
       </div>
-      <p className="trend-legend">
-        <i />
-        弹幕数量 <i className="gap-key" />
-        数据缺口
+    </section>
+  )
+}
+
+function TrendMonitor({
+  trend,
+  unavailable,
+}: {
+  trend: LiveSnapshot['trend']
+  unavailable: LiveSnapshot['unavailable']
+}) {
+  const minutes = useMemo(() => aggregateTrendByMinute(trend), [trend])
+  return (
+    <section className="trend-monitor" aria-labelledby="trend-monitor-title">
+      <div className="trend-monitor-heading">
+        <div>
+          <h3 id="trend-monitor-title">最近30分钟趋势监控</h3>
+          <p>1分钟一格，最右侧为当前分钟。</p>
+        </div>
+        <span>{minutes.length}/30格</span>
+      </div>
+      <div className="monitor-chart-list">
+        <TrendMetricChart
+          minutes={minutes}
+          metric="danmakuCount"
+          title="弹幕量"
+          unit="条"
+          tone="red"
+        />
+        <TrendMetricChart
+          minutes={minutes}
+          metric="activeSpeakerEstimate"
+          title="活跃发言"
+          unit="人（10秒峰值）"
+          tone="yellow"
+          approximate
+        />
+        <TrendMetricChart
+          minutes={minutes}
+          metric="popularityPeak"
+          title="直播热度峰值"
+          unit="热度值"
+          tone="green"
+          unavailable={unavailable.popularity}
+        />
+        <TrendMetricChart
+          minutes={minutes}
+          metric="giftCount"
+          title="礼物"
+          unit="件"
+          tone="blue"
+          unavailable={unavailable.gifts}
+        />
+        <TrendMetricChart
+          minutes={minutes}
+          metric="superChatCount"
+          title="醒目留言"
+          unit="条"
+          tone="violet"
+          unavailable={unavailable.superChats}
+        />
+      </div>
+      <p className="monitor-boundary-note">
+        活跃发言是本机匿名估算，不是在线人数；直播热度是平台热度值。虚线格表示数据缺口。
       </p>
     </section>
   )
@@ -951,7 +1199,21 @@ export function App() {
                 </span>
               </div>
 
-              <dl className="metric-grid">
+              <SegmentMonitor segment={snapshot.segment} unavailable={currentUnavailable} />
+
+              {snapshot.gapCount > 0 && (
+                <div className="status-banner gap-banner" role="status">
+                  <strong>本场有{snapshot.gapCount}次数据缺口</strong>
+                  <span>
+                    {snapshot.currentGapSince === null
+                      ? '连接已恢复，缺口期间的消息无法补回。'
+                      : `自${formatClock(snapshot.currentGapSince)}起正在中断。`}
+                  </span>
+                </div>
+              )}
+
+              <TrendMonitor trend={snapshot.trend} unavailable={currentUnavailable} />
+              <dl className="metric-grid metric-grid-after-monitor">
                 <MetricCard
                   label="弹幕总数"
                   value={snapshot.totalDanmaku.toLocaleString('zh-CN')}
@@ -993,19 +1255,6 @@ export function App() {
                   unavailable={currentUnavailable.superChats}
                 />
               </dl>
-
-              {snapshot.gapCount > 0 && (
-                <div className="status-banner gap-banner" role="status">
-                  <strong>本场有{snapshot.gapCount}次数据缺口</strong>
-                  <span>
-                    {snapshot.currentGapSince === null
-                      ? '连接已恢复，缺口期间的消息无法补回。'
-                      : `自${formatClock(snapshot.currentGapSince)}起正在中断。`}
-                  </span>
-                </div>
-              )}
-
-              <TrendChart trend={snapshot.trend} />
               <div className="ranking-grid">
                 <RankingCard
                   title="高频词"

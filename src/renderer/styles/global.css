@@ -690,53 +690,9 @@ input::placeholder {
 }
 
 .signal-card h3,
-.trend-legend,
 .signal-empty,
 .ranking-card ol {
   margin: 0;
-}
-
-.trend-bars {
-  display: flex;
-  height: 7rem;
-  align-items: end;
-  gap: 2px;
-  margin-top: var(--space-3);
-  padding-top: var(--space-2);
-  border-bottom: var(--line-thin) solid var(--color-line-strong);
-}
-
-.trend-bars > span {
-  min-width: 3px;
-  flex: 1;
-  border-radius: 1px 1px 0 0;
-  background: var(--color-signal);
-}
-
-.trend-bars > span.trend-gap {
-  border: var(--line-thin) dashed var(--color-coral);
-  background: var(--color-coral-soft);
-}
-
-.trend-legend {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-label);
-}
-
-.trend-legend i {
-  width: var(--space-3);
-  height: var(--space-2);
-  background: var(--color-signal);
-}
-
-.trend-legend .gap-key {
-  margin-left: var(--space-2);
-  border: var(--line-thin) dashed var(--color-coral);
-  background: transparent;
 }
 
 .signal-empty {

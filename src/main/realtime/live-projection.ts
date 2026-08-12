@@ -1,4 +1,9 @@
-import type { LiveSnapshot } from '../../contracts/ipc-v1/live'
+import type {
+  LiveSegmentMetric,
+  LiveSegmentMonitor,
+  LiveSnapshot,
+  LiveTrendBucket,
+} from '../../contracts/ipc-v1/live'
 
 const MAX_RECENT_DANMAKU = 500
 const RATE_WINDOW_MS = 60_000
@@ -6,6 +11,8 @@ const SPEAKER_REGISTER_BITS = 10
 const SPEAKER_REGISTER_COUNT = 1 << SPEAKER_REGISTER_BITS
 const TREND_BUCKET_MS = 10_000
 const TREND_WINDOW_BUCKETS = 180
+const SEGMENT_MAX_BUCKETS = 30
+const SEGMENT_MIN_COMPARISON_BUCKETS = 6
 const TOP_COUNTER_CAPACITY = 64
 
 class FixedTopCounter {
@@ -69,6 +76,12 @@ class FixedCardinalityCounter {
     this.#registers[bucket] = Math.max(this.#registers[bucket] ?? 0, rank)
   }
 
+  merge(other: FixedCardinalityCounter): void {
+    for (let index = 0; index < this.#registers.length; index += 1) {
+      this.#registers[index] = Math.max(this.#registers[index] ?? 0, other.#registers[index] ?? 0)
+    }
+  }
+
   estimate(): number {
     let zeroRegisters = 0
     let inverseSum = 0
@@ -94,10 +107,21 @@ export interface ProjectionDanmakuInput {
 export interface ProjectionGiftInput {
   quantity: number
   totalValueMilliCny: number | null
+  receivedAtMs?: number
 }
 
 export interface ProjectionSuperChatInput {
   valueMilliCny: number
+  receivedAtMs?: number
+}
+
+interface TrendBucketState {
+  danmakuCount: number
+  activeSpeakers: FixedCardinalityCounter
+  giftCount: number
+  superChatCount: number
+  popularityPeak: number | null
+  hasGap: boolean
 }
 
 export class LiveProjection {
@@ -119,7 +143,7 @@ export class LiveProjection {
   private activeSpeakerCount: number | null = null
   private readonly speakerRanking = new FixedTopCounter()
   private readonly keywordRanking = new FixedTopCounter()
-  private readonly trendBuckets = new Map<number, { danmakuCount: number; hasGap: boolean }>()
+  private readonly trendBuckets = new Map<number, TrendBucketState>()
   private nextMessageId = 1
   private errorCode: string | null = null
   private gapCount = 0
@@ -175,7 +199,7 @@ export class LiveProjection {
   }
 
   markRecovering(code: string): void {
-    this.updateTrend(this.clock(), true)
+    this.markGapBucket(this.clock())
     if (this.currentGapSince === null) {
       const startedAtMs = this.clock()
       this.currentGapSince = startedAtMs
@@ -224,7 +248,9 @@ export class LiveProjection {
       this.speakerRanking.add(input.localUserKey, input.displayName)
     }
     for (const term of this.extractTerms(input.content)) this.keywordRanking.add(term)
-    this.updateTrend(receivedAtMs, false)
+    const trendBucket = this.getTrendBucket(receivedAtMs)
+    trendBucket.danmakuCount += 1
+    if (input.localUserKey !== undefined) trendBucket.activeSpeakers.add(input.localUserKey)
 
     this.recentDanmaku.push({
       id: String(this.nextMessageId),
@@ -242,15 +268,19 @@ export class LiveProjection {
   ingestGift(input: ProjectionGiftInput): void {
     this.giftCount += input.quantity
     this.giftValueMilliCny += input.totalValueMilliCny ?? 0
+    this.getTrendBucket(input.receivedAtMs ?? this.clock()).giftCount += input.quantity
   }
 
   ingestSuperChat(input: ProjectionSuperChatInput): void {
     this.superChatCount += 1
     this.superChatValueMilliCny += input.valueMilliCny
+    this.getTrendBucket(input.receivedAtMs ?? this.clock()).superChatCount += 1
   }
 
-  updatePopularity(value: number): void {
+  updatePopularity(value: number, receivedAtMs = this.clock()): void {
     this.popularity = value
+    const bucket = this.getTrendBucket(receivedAtMs)
+    bucket.popularityPeak = Math.max(bucket.popularityPeak ?? 0, value)
   }
 
   updateActiveSpeakerCount(value: number): void {
@@ -260,6 +290,7 @@ export class LiveProjection {
   snapshot(): LiveSnapshot {
     const now = this.clock()
     this.pruneRateWindow(now)
+    const trend = this.createTrendSnapshot(this.endedAtMs ?? now)
     return {
       apiVersion: 1,
       platform: this.platform,
@@ -275,7 +306,8 @@ export class LiveProjection {
       gapCount: this.gapCount,
       currentGapSince: this.currentGapSince,
       lastGap: this.lastGap === null ? null : { ...this.lastGap },
-      trend: this.createTrendSnapshot(this.endedAtMs ?? now),
+      trend,
+      segment: this.createSegmentSnapshot(trend),
       keywords: this.keywordRanking
         .top(10)
         .map((item) => ({ term: item.label, estimatedCount: item.count })),
@@ -315,16 +347,30 @@ export class LiveProjection {
     }
   }
 
-  private updateTrend(timestamp: number, hasGap: boolean): void {
+  private getTrendBucket(timestamp: number): TrendBucketState {
     const bucketStartMs = Math.floor(timestamp / TREND_BUCKET_MS) * TREND_BUCKET_MS
-    const bucket = this.trendBuckets.get(bucketStartMs) ?? { danmakuCount: 0, hasGap: false }
-    if (hasGap) bucket.hasGap = true
-    else bucket.danmakuCount += 1
+    const bucket = this.trendBuckets.get(bucketStartMs) ?? {
+      danmakuCount: 0,
+      activeSpeakers: new FixedCardinalityCounter(),
+      giftCount: 0,
+      superChatCount: 0,
+      popularityPeak: null,
+      hasGap: false,
+    }
     this.trendBuckets.set(bucketStartMs, bucket)
     const threshold = bucketStartMs - (TREND_WINDOW_BUCKETS - 1) * TREND_BUCKET_MS
     for (const key of this.trendBuckets.keys()) {
       if (key < threshold) this.trendBuckets.delete(key)
     }
+    while (this.trendBuckets.size > TREND_WINDOW_BUCKETS) {
+      const oldestKey = Math.min(...this.trendBuckets.keys())
+      this.trendBuckets.delete(oldestKey)
+    }
+    return bucket
+  }
+
+  private markGapBucket(timestamp: number): void {
+    this.getTrendBucket(timestamp).hasGap = true
   }
 
   private markGapRange(startedAtMs: number, endedAtMs: number): void {
@@ -332,7 +378,7 @@ export class LiveProjection {
     let bucketStartMs = Math.floor(windowStart / TREND_BUCKET_MS) * TREND_BUCKET_MS
     const finalBucketMs = Math.floor(endedAtMs / TREND_BUCKET_MS) * TREND_BUCKET_MS
     while (bucketStartMs <= finalBucketMs) {
-      this.updateTrend(bucketStartMs, true)
+      this.markGapBucket(bucketStartMs)
       bucketStartMs += TREND_BUCKET_MS
     }
   }
@@ -354,10 +400,109 @@ export class LiveProjection {
       trend.push({
         bucketStartMs,
         danmakuCount: bucket?.danmakuCount ?? 0,
-        hasGap: bucket?.hasGap ?? false,
+        activeSpeakerEstimate: bucket?.activeSpeakers.estimate() ?? 0,
+        giftCount: bucket?.giftCount ?? 0,
+        superChatCount: bucket?.superChatCount ?? 0,
+        popularityPeak: bucket?.popularityPeak ?? null,
+        hasGap:
+          (bucket?.hasGap ?? false) ||
+          (this.currentGapSince !== null && bucketStartMs >= this.currentGapSince),
       })
     }
     return trend
+  }
+
+  private createSegmentSnapshot(trend: LiveTrendBucket[]): LiveSegmentMonitor {
+    const isWaitingForCollection = this.status === 'waiting' || this.status === 'connecting'
+    if (isWaitingForCollection || trend.length < SEGMENT_MIN_COMPARISON_BUCKETS * 2) {
+      const current = trend.slice(-SEGMENT_MAX_BUCKETS)
+      return {
+        windowSeconds: current.length * (TREND_BUCKET_MS / 1_000),
+        status:
+          !isWaitingForCollection && current.some((bucket) => bucket.hasGap) ? 'gap' : 'starting',
+        hasGap: current.some((bucket) => bucket.hasGap),
+        metrics: this.createSegmentMetrics(current, []),
+      }
+    }
+
+    const comparisonBucketCount = Math.min(SEGMENT_MAX_BUCKETS, Math.floor(trend.length / 2))
+    const current = trend.slice(-comparisonBucketCount)
+    const previous = trend.slice(-comparisonBucketCount * 2, -comparisonBucketCount)
+    const hasGap = [...previous, ...current].some((bucket) => bucket.hasGap)
+    const metrics = this.createSegmentMetrics(current, previous)
+    const currentDanmaku = metrics.danmaku.current ?? 0
+    const previousDanmaku = metrics.danmaku.previous ?? 0
+    let status: LiveSegmentMonitor['status'] = 'steady'
+    if (hasGap) status = 'gap'
+    else if (currentDanmaku === 0) status = 'quiet'
+    else if (previousDanmaku === 0) status = 'warming'
+    else if (Math.abs(currentDanmaku - previousDanmaku) <= 3) status = 'steady'
+    else if (currentDanmaku / previousDanmaku >= 1.25) status = 'warming'
+    else if (currentDanmaku / previousDanmaku <= 0.75) status = 'cooling'
+
+    return {
+      windowSeconds: comparisonBucketCount * (TREND_BUCKET_MS / 1_000),
+      status,
+      hasGap,
+      metrics,
+    }
+  }
+
+  private createSegmentMetrics(
+    currentBuckets: LiveTrendBucket[],
+    previousBuckets: LiveTrendBucket[],
+  ): LiveSegmentMonitor['metrics'] {
+    const current = this.aggregateSegment(currentBuckets)
+    const previous = previousBuckets.length === 0 ? null : this.aggregateSegment(previousBuckets)
+    return {
+      danmaku: this.createSegmentMetric(current.danmaku, previous?.danmaku ?? null),
+      activeSpeakers: this.createSegmentMetric(
+        current.activeSpeakers,
+        previous?.activeSpeakers ?? null,
+      ),
+      gifts: this.createSegmentMetric(current.gifts, previous?.gifts ?? null),
+      superChats: this.createSegmentMetric(current.superChats, previous?.superChats ?? null),
+      popularity: this.createSegmentMetric(current.popularity, previous?.popularity ?? null),
+    }
+  }
+
+  private aggregateSegment(buckets: LiveTrendBucket[]): {
+    danmaku: number
+    activeSpeakers: number
+    gifts: number
+    superChats: number
+    popularity: number | null
+  } {
+    const speakers = new FixedCardinalityCounter()
+    let danmaku = 0
+    let gifts = 0
+    let superChats = 0
+    let popularity: number | null = null
+    for (const bucket of buckets) {
+      danmaku += bucket.danmakuCount
+      gifts += bucket.giftCount
+      superChats += bucket.superChatCount
+      if (bucket.popularityPeak !== null) {
+        popularity = Math.max(popularity ?? 0, bucket.popularityPeak)
+      }
+      const state = this.trendBuckets.get(bucket.bucketStartMs)
+      if (state !== undefined) speakers.merge(state.activeSpeakers)
+    }
+    return { danmaku, activeSpeakers: speakers.estimate(), gifts, superChats, popularity }
+  }
+
+  private createSegmentMetric(current: number | null, previous: number | null): LiveSegmentMetric {
+    if (current === null || previous === null) {
+      return { current, previous, changePercent: null }
+    }
+    if (previous === 0) {
+      return { current, previous, changePercent: current === 0 ? 0 : null }
+    }
+    return {
+      current,
+      previous,
+      changePercent: Math.round(((current - previous) / previous) * 100),
+    }
   }
 
   private extractTerms(content: string): string[] {

@@ -118,6 +118,7 @@ export class CollectionService {
         },
         onAuthenticated: async (room) => {
           if (generation !== this.generation) throw new Error('STALE_RUN')
+          this.projection.start(room.roomId, 'bilibili')
           const session = await this.store.createSession({
             platform: 'bilibili',
             roomId: room.roomId,
@@ -200,6 +201,7 @@ export class CollectionService {
       onConnected: async () => {
         if (generation !== this.generation) return
         const now = this.clock()
+        this.projection.start(target.roomDisplay, 'douyin')
         const session = await this.store.createSession({
           platform: 'douyin',
           roomId: target.roomDisplay,
@@ -269,7 +271,7 @@ export class CollectionService {
       } else if (event.type === 'super_chat') {
         this.projection.ingestSuperChat(event)
       } else {
-        this.projection.updatePopularity(event.value)
+        this.projection.updatePopularity(event.value, event.receivedAtMs)
       }
     }
     this.scheduleEmit()

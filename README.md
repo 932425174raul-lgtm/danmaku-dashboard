@@ -47,10 +47,13 @@
 
 看板聚合的是已经写入SQLite的事件，因此实时数字与历史记录使用同一份数据事实。
 
+- 用最近最多5分钟与前一段等长时间比较，显示互动正在升温、平稳、回落、安静，或因数据缺口暂停判断。
+- 当前段同时显示弹幕、匿名估算的活跃发言人数、直播热度、礼物和醒目留言相对前一段的变化。
+- 提供弹幕量、活跃发言、直播热度、礼物和醒目留言5张最近30分钟趋势图，界面按1分钟合并显示。
 - 弹幕总数和最近一分钟的弹幕速率。
 - 基于本地匿名标识去重的活跃发言人数。
 - B站直播热度、礼物数量与已知价值、醒目留言数量与金额。
-- 最近30分钟弹幕趋势，每10秒一个统计桶。
+- 主进程仍使用10秒统计桶，固定保留最近180个桶；界面最多渲染30个分钟点，不会随直播时长增加节点。
 - 连接中断期间的数据缺口标记，缺失区间不会被当作零互动。
 - 高频词与活跃用户排行，高频词次数使用「约」显示，不冒充精确统计。
 
@@ -269,14 +272,16 @@ BILIBILI_PROBE_DURATION_MS=15000 npm run test:live-protocol -- <公开直播间�
 
 ## 当前验证状态
 
-`v0.2.0`在2026-08-12的验证结果：
+`v0.3.0`在2026-08-12的验证结果：
 
 - Prettier、ESLint和TypeScript检查通过。
-- 24个单元测试文件，共56项测试通过。
+- 24个单元测试文件，共60项测试通过。
 - 1个SQLite集成测试文件，共8项测试通过。
 - 隐私扫描通过。
+- 实时投影在固定180个10秒桶内记录5类趋势，并使用固定容量基数估算器计算短时活跃发言人数。
+- 实时监控页在1440px宽窗口和620px窄窗口中显示5张趋势图，没有水平溢出，浏览器控制台没有运行错误。
 - 20,000条合成数据中，复盘查询约10毫秒；100万条合成数据中约1.0秒，返回时间格不超过144个。
-- Apple Silicon `.app`重新生成并通过主进程、写入Worker与读取Worker构建；当前环境的`hdiutil`因设备未配置未能生成DMG，GitHub Release仍需在允许镜像设备的macOS环境执行。
+- Apple Silicon `.app`与DMG已重新生成，并通过主进程、双SQLite Worker、架构、Fuse与DMG挂载检查。
 - Windows x64便携ZIP已在GitHub Windows Runner上完成原生构建与运行验收；PE、应用图标、asar、Fuse、UTF-8文件名、SQLite双Worker和两万条smoke基准全部通过。
 - 复盘页在1440px宽窗口和430px窄窗口中没有水平溢出，浏览器控制台没有运行错误。
 
@@ -300,6 +305,7 @@ BILIBILI_PROBE_DURATION_MS=15000 npm run test:live-protocol -- <公开直播间�
 - [项目词汇表](./CONTEXT.md)
 - [第一版实施规格](./docs/spec/implementation-plan.md)
 - [实时监控界面规格](./docs/spec/realtime-ui.md)
+- [实时趋势监控看板规格](./docs/spec/realtime-monitoring-dashboard-v2.md)
 - [B站网页弹幕协议契约](./docs/research/bilibili-web-protocol-contract-2026-07-29.md)
 - [抖音公开直播协议可行性研究](./docs/research/douyin-live-protocol-feasibility-2026-07-31.md)
 - [Electron进程与IPC契约](./docs/spec/electron-process-and-ipc.md)

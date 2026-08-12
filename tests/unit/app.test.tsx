@@ -29,6 +29,18 @@ const idleSnapshot: LiveSnapshot = {
   currentGapSince: null,
   lastGap: null,
   trend: [],
+  segment: {
+    windowSeconds: 0,
+    status: 'starting',
+    hasGap: false,
+    metrics: {
+      danmaku: { current: 0, previous: null, changePercent: null },
+      activeSpeakers: { current: 0, previous: null, changePercent: null },
+      gifts: { current: 0, previous: null, changePercent: null },
+      superChats: { current: 0, previous: null, changePercent: null },
+      popularity: { current: null, previous: null, changePercent: null },
+    },
+  },
   keywords: [],
   activeUsers: [],
   recentDanmaku: [],
@@ -232,7 +244,7 @@ describe('App', () => {
     })
 
     const dashboard = screen.getByRole('complementary', { name: '实时看板' })
-    expect(within(dashboard).getAllByText('不可用')).toHaveLength(3)
+    expect(within(dashboard).getAllByText('不可用')).toHaveLength(9)
     expect(within(dashboard).queryByText('¥0.00')).not.toBeInTheDocument()
   })
 
@@ -244,9 +256,26 @@ describe('App', () => {
     act(() => {
       emit({
         ...idleSnapshot,
+        status: 'collecting',
+        segment: {
+          windowSeconds: 60,
+          status: 'warming',
+          hasGap: false,
+          metrics: {
+            danmaku: { current: 24, previous: 12, changePercent: 100 },
+            activeSpeakers: { current: 9, previous: 6, changePercent: 50 },
+            gifts: { current: 5, previous: 2, changePercent: 150 },
+            superChats: { current: 1, previous: 0, changePercent: null },
+            popularity: { current: 96_000, previous: 80_000, changePercent: 20 },
+          },
+        },
         trend: Array.from({ length: 6 }, (_, index) => ({
           bucketStartMs: 1_700_000_000_000 + index * 10_000,
           danmakuCount: index + 1,
+          activeSpeakerEstimate: index + 1,
+          giftCount: index,
+          superChatCount: index === 5 ? 1 : 0,
+          popularityPeak: 80_000 + index * 1_000,
           hasGap: index === 3,
         })),
         keywords: [{ term: '合成高频词', estimatedCount: 12, errorBound: 1 }],
@@ -256,8 +285,21 @@ describe('App', () => {
 
     const dashboard = screen.getByRole('complementary', { name: '实时看板' })
     expect(dashboard.querySelectorAll('[class*="metric-tone-"]')).toHaveLength(6)
-    expect(dashboard.querySelectorAll('[class*="trend-spectrum-"]')).toHaveLength(5)
-    expect(dashboard.querySelector('.trend-gap')).toBeInTheDocument()
+    expect(within(dashboard).getByRole('heading', { name: '互动升温' })).toBeInTheDocument()
+    expect(within(dashboard).getByText('当前1分钟')).toBeInTheDocument()
+    expect(within(dashboard).getByRole('img', { name: '最近30分钟弹幕量趋势' })).toBeInTheDocument()
+    expect(
+      within(dashboard).getByRole('img', { name: '最近30分钟活跃发言趋势' }),
+    ).toBeInTheDocument()
+    expect(
+      within(dashboard).getByRole('img', { name: '最近30分钟直播热度峰值趋势' }),
+    ).toBeInTheDocument()
+    expect(within(dashboard).getByRole('img', { name: '最近30分钟礼物趋势' })).toBeInTheDocument()
+    expect(
+      within(dashboard).getByRole('img', { name: '最近30分钟醒目留言趋势' }),
+    ).toBeInTheDocument()
+    expect(dashboard.querySelectorAll('.monitor-chart')).toHaveLength(5)
+    expect(dashboard.querySelector('.monitor-gap')).toBeInTheDocument()
     expect(dashboard.querySelector('.ranking-tone-warm')).toHaveTextContent('合成高频词')
     expect(dashboard.querySelector('.ranking-tone-cool')).toHaveTextContent('匿名观众甲')
   })

@@ -19,7 +19,27 @@ describe('live IPC payload', () => {
       gapCount: 0,
       currentGapSince: null,
       lastGap: null,
-      trend: [],
+      trend: Array.from({ length: 180 }, (_, index) => ({
+        bucketStartMs: index * 10_000,
+        danmakuCount: index,
+        activeSpeakerEstimate: index,
+        giftCount: index % 5,
+        superChatCount: index % 3,
+        popularityPeak: 100_000 + index,
+        hasGap: index % 37 === 0,
+      })),
+      segment: {
+        windowSeconds: 0,
+        status: 'starting',
+        hasGap: false,
+        metrics: {
+          danmaku: { current: 0, previous: null, changePercent: null },
+          activeSpeakers: { current: 0, previous: null, changePercent: null },
+          gifts: { current: 0, previous: null, changePercent: null },
+          superChats: { current: 0, previous: null, changePercent: null },
+          popularity: { current: null, previous: null, changePercent: null },
+        },
+      },
       keywords: [],
       activeUsers: [],
       recentDanmaku: Array.from({ length: 500 }, (_, index) => ({
