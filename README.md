@@ -264,10 +264,10 @@ BILIBILI_PROBE_DURATION_MS=15000 npm run test:live-protocol -- <公开直播间�
 
 ## 当前验证状态
 
-`v0.1.0`在2026-08-12的验证结果：
+`v0.1.1`在2026-08-12的验证结果：
 
 - Prettier、ESLint和TypeScript检查通过。
-- 24个单元测试文件，共54项测试通过。
+- 24个单元测试文件，共55项测试通过。
 - 1个SQLite集成测试文件，共4项测试通过。
 - 隐私扫描通过。
 - Apple Silicon `.app`与DMG生成成功，最终产物架构与挂载检查通过。

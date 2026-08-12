@@ -160,6 +160,32 @@ describe('App', () => {
     expect(within(dashboard).queryByText('¥0.00')).not.toBeInTheDocument()
   })
 
+  it('实时看板使用光谱区分指标、趋势与排行类别', async () => {
+    const { emit } = installApi()
+    render(<App />)
+    await screen.findByText('实时弹幕')
+
+    act(() => {
+      emit({
+        ...idleSnapshot,
+        trend: Array.from({ length: 6 }, (_, index) => ({
+          bucketStartMs: 1_700_000_000_000 + index * 10_000,
+          danmakuCount: index + 1,
+          hasGap: index === 3,
+        })),
+        keywords: [{ term: '合成高频词', estimatedCount: 12, errorBound: 1 }],
+        activeUsers: [{ displayName: '匿名观众甲', danmakuCount: 8 }],
+      })
+    })
+
+    const dashboard = screen.getByRole('complementary', { name: '实时看板' })
+    expect(dashboard.querySelectorAll('[class*="metric-tone-"]')).toHaveLength(6)
+    expect(dashboard.querySelectorAll('[class*="trend-spectrum-"]')).toHaveLength(5)
+    expect(dashboard.querySelector('.trend-gap')).toBeInTheDocument()
+    expect(dashboard.querySelector('.ranking-tone-warm')).toHaveTextContent('合成高频词')
+    expect(dashboard.querySelector('.ranking-tone-cool')).toHaveTextContent('匿名观众甲')
+  })
+
   it('可查看历史、搜索弹幕，并在二次确认后删除整场', async () => {
     const { api } = installApi()
     render(<App />)

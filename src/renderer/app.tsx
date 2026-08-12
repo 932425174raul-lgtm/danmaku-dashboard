@@ -118,17 +118,19 @@ function MetricCard({
   label,
   value,
   note,
+  tone,
   unavailable = false,
   primary = false,
 }: {
   label: string
   value: string
   note: string
+  tone: 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'violet'
   unavailable?: boolean
   primary?: boolean
 }) {
   return (
-    <div className={`metric-card ${primary ? 'metric-primary' : ''}`}>
+    <div className={`metric-card metric-tone-${tone} ${primary ? 'metric-primary' : ''}`}>
       <dt>{label}</dt>
       <dd className={unavailable ? 'metric-unavailable' : undefined}>
         {unavailable ? '不可用' : value}
@@ -150,14 +152,17 @@ function TrendChart({ trend }: { trend: LiveSnapshot['trend'] }) {
         {trend.length === 0 ? (
           <p className="signal-empty">收到弹幕后生成趋势</p>
         ) : (
-          trend.map((bucket) => (
-            <span
-              className={bucket.hasGap ? 'trend-gap' : ''}
-              key={bucket.bucketStartMs}
-              title={`${formatClock(bucket.bucketStartMs)}，${bucket.danmakuCount}条${bucket.hasGap ? '，数据缺口' : ''}`}
-              style={{ height: `${Math.max(8, (bucket.danmakuCount / max) * 100)}%` }}
-            />
-          ))
+          trend.map((bucket, index) => {
+            const spectrumBand = Math.min(5, Math.floor((index * 6) / trend.length))
+            return (
+              <span
+                className={bucket.hasGap ? 'trend-gap' : `trend-spectrum-${spectrumBand}`}
+                key={bucket.bucketStartMs}
+                title={`${formatClock(bucket.bucketStartMs)}，${bucket.danmakuCount}条${bucket.hasGap ? '，数据缺口' : ''}`}
+                style={{ height: `${Math.max(8, (bucket.danmakuCount / max) * 100)}%` }}
+              />
+            )
+          })
         )}
       </div>
       <p className="trend-legend">
@@ -173,13 +178,15 @@ function RankingCard({
   title,
   empty,
   items,
+  tone,
 }: {
   title: string
   empty: string
   items: Array<{ label: string; count: number }>
+  tone: 'warm' | 'cool'
 }) {
   return (
-    <section className="signal-card ranking-card">
+    <section className={`signal-card ranking-card ranking-tone-${tone}`}>
       <div className="section-heading">
         <h3>{title}</h3>
         <span>TOP 5</span>
@@ -677,34 +684,40 @@ export function App() {
                   label="弹幕总数"
                   value={snapshot.totalDanmaku.toLocaleString('zh-CN')}
                   note="本次会话"
+                  tone="red"
                   primary
                 />
                 <MetricCard
                   label="最近一分钟"
                   value={snapshot.danmakuPerMinute.toLocaleString('zh-CN')}
                   note="条/分钟"
+                  tone="orange"
                 />
                 <MetricCard
                   label="活跃人数"
                   value={snapshot.activeSpeakers.toLocaleString('zh-CN')}
                   note="本地匿名去重"
+                  tone="yellow"
                 />
                 <MetricCard
                   label="直播热度"
                   value={(snapshot.metrics.popularity ?? 0).toLocaleString('zh-CN')}
                   note="平台热度值"
+                  tone="green"
                   unavailable={currentUnavailable.popularity}
                 />
                 <MetricCard
                   label="礼物"
                   value={`${snapshot.metrics.giftCount.toLocaleString('zh-CN')}件 · ${formatMoney(snapshot.metrics.giftValueMilliCny)}`}
                   note="数量与估算金额"
+                  tone="blue"
                   unavailable={currentUnavailable.gifts}
                 />
                 <MetricCard
                   label="醒目留言"
                   value={`${snapshot.metrics.superChatCount.toLocaleString('zh-CN')}条 · ${formatMoney(snapshot.metrics.superChatValueMilliCny)}`}
                   note="数量与金额"
+                  tone="violet"
                   unavailable={currentUnavailable.superChats}
                 />
               </dl>
@@ -729,6 +742,7 @@ export function App() {
                     label: item.term,
                     count: item.estimatedCount,
                   }))}
+                  tone="warm"
                 />
                 <RankingCard
                   title="活跃用户"
@@ -737,6 +751,7 @@ export function App() {
                     label: item.displayName,
                     count: item.danmakuCount,
                   }))}
+                  tone="cool"
                 />
               </div>
 

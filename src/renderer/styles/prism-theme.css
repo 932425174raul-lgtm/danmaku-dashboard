@@ -354,24 +354,66 @@ body {
 }
 
 .metric-card {
+  --metric-accent: var(--color-text);
+
   padding: var(--space-3);
   border: 0;
   border-right: var(--line-thin) solid var(--color-line);
   border-bottom: var(--line-thin) solid var(--color-line);
-  background: transparent;
+  background: color-mix(in srgb, var(--metric-accent) 7%, var(--color-panel));
 }
 
 .metric-primary {
-  background: var(--color-panel-raised);
+  background: color-mix(in srgb, var(--metric-accent) 11%, var(--color-panel));
+}
+
+.metric-tone-red {
+  --metric-accent: var(--color-spectrum-red);
+}
+
+.metric-tone-orange {
+  --metric-accent: var(--color-spectrum-orange);
+}
+
+.metric-tone-yellow {
+  --metric-accent: var(--color-spectrum-yellow);
+}
+
+.metric-tone-green {
+  --metric-accent: var(--color-spectrum-green);
+}
+
+.metric-tone-blue {
+  --metric-accent: var(--color-spectrum-blue);
+}
+
+.metric-tone-violet {
+  --metric-accent: var(--color-spectrum-violet);
+}
+
+.metric-card dt {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: color-mix(in srgb, var(--metric-accent) 72%, var(--color-text));
+}
+
+.metric-card dt::before {
+  width: var(--space-2);
+  height: calc(var(--line-thin) * 2);
+  flex: none;
+  background: var(--metric-accent);
+  content: '';
 }
 
 .metric-card dd {
+  color: var(--metric-accent);
   font-size: var(--font-size-title);
   font-weight: 600;
 }
 
 .metric-card.metric-primary dd {
-  color: var(--color-text);
+  color: var(--metric-accent);
   font-size: var(--font-size-metric-hero);
 }
 
@@ -422,11 +464,37 @@ body {
   min-width: 2px;
   border-radius: 0;
   background: var(--color-text-muted);
+  opacity: 0.88;
+}
+
+.trend-bars > span.trend-spectrum-0 {
+  background: var(--color-spectrum-red);
+}
+
+.trend-bars > span.trend-spectrum-1 {
+  background: var(--color-spectrum-orange);
+}
+
+.trend-bars > span.trend-spectrum-2 {
+  background: var(--color-spectrum-yellow);
+}
+
+.trend-bars > span.trend-spectrum-3 {
+  background: var(--color-spectrum-green);
+}
+
+.trend-bars > span.trend-spectrum-4 {
+  background: var(--color-spectrum-blue);
+}
+
+.trend-bars > span.trend-spectrum-5 {
+  background: var(--color-spectrum-violet);
 }
 
 .trend-bars > span.trend-gap {
   border-color: var(--color-coral);
   background: var(--color-coral-soft);
+  opacity: 1;
 }
 
 .trend-legend i {
@@ -447,11 +515,35 @@ body {
 }
 
 .ranking-card {
+  --ranking-accent: var(--color-text-muted);
+
   padding: var(--space-3) 0 0;
 }
 
+.ranking-tone-warm {
+  --ranking-accent: var(--color-spectrum-orange);
+}
+
+.ranking-tone-cool {
+  --ranking-accent: var(--color-spectrum-blue);
+}
+
+.ranking-card .section-heading h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ranking-card .section-heading h3::before {
+  width: var(--space-2);
+  height: var(--space-2);
+  flex: none;
+  background: var(--ranking-accent);
+  content: '';
+}
+
 .ranking-card li strong {
-  color: var(--color-text-muted);
+  color: var(--ranking-accent);
 }
 
 .section-heading > span {
