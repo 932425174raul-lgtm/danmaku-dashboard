@@ -11,7 +11,8 @@ const eventCount = profile === 'million' ? 1_000_000 : profile === 'smoke' ? 20_
 if (eventCount === 0) throw new Error('INVALID_BENCHMARK_PROFILE')
 
 const directory = mkdtempSync(join(tmpdir(), 'danmaku-dashboard-benchmark-'))
-const store = new LocalStore(join(directory, 'benchmark.sqlite3'))
+const databasePath = join(directory, 'benchmark.sqlite3')
+let store = new LocalStore(databasePath)
 
 try {
   store.initialize()
@@ -43,8 +44,16 @@ try {
     committed += store.appendEvents(session.id, batch).insertedCounts.danmaku
   }
   const elapsedMs = performance.now() - startedAt
+  store.finalizeSession(session.id, 'user_stop', 1_700_000_000_000 + Math.max(1, eventCount))
+  store.close()
+  store = new LocalStore(databasePath, { readOnly: true })
+  store.initialize()
+  const reviewStartedAt = performance.now()
+  const review = store.getSessionReview(session.id)
+  const reviewElapsedMs = performance.now() - reviewStartedAt
+  if (review === null || review.buckets.length > 144) throw new Error('INVALID_SESSION_REVIEW')
   process.stdout.write(
-    `${JSON.stringify({ status: 'ok', profile, committed, elapsedMs, eventsPerSecond: Math.round((committed * 1000) / elapsedMs) })}\n`,
+    `${JSON.stringify({ status: 'ok', profile, committed, elapsedMs, eventsPerSecond: Math.round((committed * 1000) / elapsedMs), reviewElapsedMs, reviewBucketCount: review.buckets.length })}\n`,
   )
 } finally {
   store.close()

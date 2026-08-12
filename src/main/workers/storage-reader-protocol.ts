@@ -35,6 +35,13 @@ const listDanmakuSchema = z
     payload: z.object({ sessionId: positiveSafeInteger, options: pageOptionsSchema }).strict(),
   })
   .strict()
+const getSessionReviewSchema = z
+  .object({
+    ...envelope,
+    query: z.literal('getSessionReview'),
+    payload: z.object({ sessionId: positiveSafeInteger }).strict(),
+  })
+  .strict()
 const searchDanmakuSchema = z
   .object({
     ...envelope,
@@ -58,6 +65,7 @@ const shutdownSchema = z
 
 const readerQuerySchema = z.discriminatedUnion('query', [
   listSessionsSchema,
+  getSessionReviewSchema,
   listDanmakuSchema,
   searchDanmakuSchema,
   shutdownSchema,
@@ -65,6 +73,12 @@ const readerQuerySchema = z.discriminatedUnion('query', [
 
 export type StorageReaderQuery =
   | { kind: 'reader-query'; id: number; query: 'listSessions'; payload: { limit: number } }
+  | {
+      kind: 'reader-query'
+      id: number
+      query: 'getSessionReview'
+      payload: { sessionId: number }
+    }
   | {
       kind: 'reader-query'
       id: number

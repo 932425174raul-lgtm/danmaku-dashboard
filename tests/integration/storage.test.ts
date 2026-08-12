@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -207,5 +208,161 @@ describe('LocalStore', () => {
     expect(store.listSessions()).toEqual([])
     expect(store.listDanmaku(session.id, { limit: 100 })).toEqual([])
     store.close()
+  })
+
+  it('结束场次生成可追溯的弹幕复盘与分时活跃发言趋势', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'danmaku-dashboard-review-'))
+    temporaryDirectories.push(directory)
+    const store = new LocalStore(join(directory, 'library.sqlite3'))
+    store.initialize()
+    const startedAtMs = 1_780_000_000_000
+    const session = store.createSession({
+      platform: 'bilibili',
+      roomId: 'review-room',
+      roomTitle: '复盘合成直播间',
+      adapterVersion: 'bilibili-web-v1',
+      startedAtMs,
+    })
+    const userA = Uint8Array.from({ length: 16 }, (_, index) => index + 1)
+    const userB = Uint8Array.from({ length: 16 }, (_, index) => index + 17)
+    const events: DanmakuEvent[] = [
+      {
+        type: 'danmaku',
+        sessionId: session.id,
+        sourceEventKey: null,
+        receivedAtMs: startedAtMs + 30_000,
+        sentAtMs: null,
+        localUserKey: userA,
+        displayName: '观众甲',
+        text: '再讲一遍',
+        medalName: null,
+        medalLevel: null,
+      },
+      {
+        type: 'danmaku',
+        sessionId: session.id,
+        sourceEventKey: null,
+        receivedAtMs: startedAtMs + 60_000,
+        sentAtMs: null,
+        localUserKey: userB,
+        displayName: '观众乙',
+        text: '再讲一遍',
+        medalName: null,
+        medalLevel: null,
+      },
+      {
+        type: 'danmaku',
+        sessionId: session.id,
+        sourceEventKey: null,
+        receivedAtMs: startedAtMs + 330_000,
+        sentAtMs: null,
+        localUserKey: userA,
+        displayName: '观众甲',
+        text: '这个案例很好',
+        medalName: null,
+        medalLevel: null,
+      },
+    ]
+    store.appendEvents(session.id, events)
+    store.openGap(session.id, 'network', startedAtMs + 340_000)
+    store.closeGap(session.id, startedAtMs + 350_000, true)
+    store.finalizeSession(session.id, 'user_stop', startedAtMs + 600_000)
+
+    const review = store.getSessionReview(session.id)
+    expect(review).toMatchObject({
+      sessionId: session.id,
+      bucketMinutes: 5,
+      totals: { danmakuCount: 3, activeUserCount: 2, gapCount: 1 },
+      mostRepeatedDanmaku: {
+        text: '再讲一遍',
+        count: 2,
+        uniqueUserCount: 2,
+      },
+      peakDanmakuBucket: { danmakuCount: 2, activeSpeakerCount: 2 },
+      peakActiveSpeakerBucket: { danmakuCount: 2, activeSpeakerCount: 2 },
+    })
+    expect(review?.repeatedDanmaku).toHaveLength(1)
+    expect(review?.buckets).toMatchObject([
+      { danmakuCount: 2, activeSpeakerCount: 2, hasGap: false },
+      { danmakuCount: 1, activeSpeakerCount: 1, hasGap: true },
+    ])
+    expect(review?.topThreeDanmakuShare).toBe(1)
+    store.close()
+  })
+
+  it('活动场次不生成最终复盘', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'danmaku-dashboard-active-review-'))
+    temporaryDirectories.push(directory)
+    const store = new LocalStore(join(directory, 'library.sqlite3'))
+    store.initialize()
+    const session = store.createSession({
+      platform: 'bilibili',
+      roomId: 'active-room',
+      roomTitle: '进行中的合成直播间',
+      adapterVersion: 'bilibili-web-v1',
+      startedAtMs: 1_780_000_000_000,
+    })
+
+    expect(store.getSessionReview(session.id)).toBeNull()
+    store.close()
+  })
+
+  it('超过12小时的场次会自动放大时间格并限制144格', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'danmaku-dashboard-long-review-'))
+    temporaryDirectories.push(directory)
+    const store = new LocalStore(join(directory, 'library.sqlite3'))
+    store.initialize()
+    const startedAtMs = 1_780_000_000_000
+    const session = store.createSession({
+      platform: 'bilibili',
+      roomId: 'long-room',
+      roomTitle: '超长合成直播间',
+      adapterVersion: 'bilibili-web-v1',
+      startedAtMs,
+    })
+    store.finalizeSession(session.id, 'user_stop', startedAtMs + 24 * 60 * 60 * 1_000)
+
+    const review = store.getSessionReview(session.id)
+    expect(review).toMatchObject({ bucketMinutes: 10 })
+    expect(review?.buckets).toHaveLength(144)
+    expect(review?.buckets[0]).toMatchObject({ bucketStartMs: startedAtMs })
+    expect(review?.buckets.at(-1)).toMatchObject({
+      bucketEndMs: startedAtMs + 24 * 60 * 60 * 1_000,
+    })
+    store.close()
+  })
+
+  it('会把现有v3数据库升级到支持复盘索引的v4', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'danmaku-dashboard-review-migration-'))
+    temporaryDirectories.push(directory)
+    const databasePath = join(directory, 'library.sqlite3')
+    const store = new LocalStore(databasePath)
+    store.initialize()
+    store.close()
+
+    const legacy = new DatabaseSync(databasePath)
+    const checksum = legacy
+      .prepare('SELECT checksum FROM schema_migrations WHERE version = 4')
+      .get() as { checksum: string }
+    legacy.exec(`
+      DROP INDEX danmaku_review_text;
+      DELETE FROM schema_migrations WHERE version = 4;
+      INSERT INTO schema_migrations(version, name, checksum, applied_at_ms)
+      VALUES (3, 'storage-worker-and-deletion-index', '${checksum.checksum}', 1);
+      PRAGMA user_version = 3;
+    `)
+    legacy.close()
+
+    const upgraded = new LocalStore(databasePath)
+    upgraded.initialize()
+    upgraded.close()
+    const verified = new DatabaseSync(databasePath, { readOnly: true })
+    const version = verified.prepare('PRAGMA user_version').get() as { user_version: number }
+    const index = verified
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?")
+      .get('danmaku_review_text')
+    expect(version.user_version).toBe(4)
+    expect(index).toBeDefined()
+    verified.close()
   })
 })

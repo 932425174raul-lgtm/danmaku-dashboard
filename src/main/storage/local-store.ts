@@ -83,6 +83,46 @@ export interface StoredDanmaku {
   medalLevel: number | null
 }
 
+export interface SessionReviewBucket {
+  bucketStartMs: number
+  bucketEndMs: number
+  danmakuCount: number
+  activeSpeakerCount: number
+  giftCount: number
+  superChatCount: number
+  popularityPeak: number | null
+  hasGap: boolean
+}
+
+export interface SessionRepeatedDanmaku {
+  text: string
+  count: number
+  uniqueUserCount: number
+  firstAtMs: number
+  lastAtMs: number
+}
+
+export interface SessionReview {
+  sessionId: number
+  startedAtMs: number
+  endedAtMs: number
+  bucketMinutes: number
+  totals: {
+    danmakuCount: number
+    activeUserCount: number
+    giftCount: number
+    superChatCount: number
+    gapCount: number
+    gapDurationMs: number
+  }
+  buckets: SessionReviewBucket[]
+  repeatedDanmaku: SessionRepeatedDanmaku[]
+  mostRepeatedDanmaku: SessionRepeatedDanmaku | null
+  peakDanmakuBucket: SessionReviewBucket | null
+  peakActiveSpeakerBucket: SessionReviewBucket | null
+  topThreeDanmakuShare: number
+}
+
 export interface PrepareDeletionResult {
   sessionId: number
   accepted: boolean
@@ -96,7 +136,7 @@ export interface ConfirmDeletionResult {
 
 type SqlRow = Record<string, string | number | bigint | Uint8Array | null>
 
-const MIGRATION_VERSION = 3
+const MIGRATION_VERSION = 4
 
 const DATABASE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -202,6 +242,9 @@ WHERE source_event_key IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS danmaku_timeline
 ON danmaku_events(session_id, received_at_ms, id);
+
+CREATE INDEX IF NOT EXISTS danmaku_review_text
+ON danmaku_events(session_id, text, received_at_ms, local_user_key);
 
 CREATE TABLE IF NOT EXISTS gift_events (
   id INTEGER PRIMARY KEY,
@@ -332,6 +375,14 @@ const requireSafeNonnegativeInteger = (value: number, field: string): void => {
 
 const requireNonemptyText = (value: string, field: string): void => {
   if (value.trim().length === 0) throw new RangeError(`${field}不能为空`)
+}
+
+const pickPeakBucket = (
+  buckets: SessionReviewBucket[],
+  field: 'danmakuCount' | 'activeSpeakerCount',
+): SessionReviewBucket | null => {
+  if (buckets.length === 0 || buckets.every((bucket) => bucket[field] === 0)) return null
+  return buckets.reduce((peak, bucket) => (bucket[field] > peak[field] ? bucket : peak))
 }
 
 export class LocalStore {
@@ -712,6 +763,151 @@ export class LocalStore {
     }))
   }
 
+  getSessionReview(sessionId: number): SessionReview | null {
+    requireSafeNonnegativeInteger(sessionId, 'sessionId')
+    if (sessionId === 0) throw new RangeError('sessionId必须大于0')
+    const database = this.#getDatabase()
+    database.exec('PRAGMA temp_store = FILE')
+    const session = database
+      .prepare(
+        `SELECT s.id, s.started_at_ms, s.ended_at_ms, s.status,
+                m.danmaku_count, m.active_user_count, m.gift_count,
+                m.super_chat_count, m.gap_count, m.gap_duration_ms
+         FROM sessions s
+         JOIN session_metrics m ON m.session_id = s.id
+         WHERE s.id = ? AND s.deleted_at_ms IS NULL`,
+      )
+      .get(sessionId) as SqlRow | undefined
+    if (session === undefined || session.status === 'active' || session.ended_at_ms === null) {
+      return null
+    }
+
+    const startedAtMs = toNumber(session.started_at_ms)
+    const endedAtMs = toNumber(session.ended_at_ms)
+    const fiveMinutesMs = 5 * 60 * 1_000
+    const durationMs = Math.max(0, endedAtMs - startedAtMs)
+    const bucketMinutes = Math.max(5, Math.ceil(durationMs / (144 * fiveMinutesMs)) * 5)
+    const bucketMs = bucketMinutes * 60 * 1_000
+    const bucketCount = Math.max(1, Math.ceil(durationMs / bucketMs))
+    const lastBucketIndex = bucketCount - 1
+    const buckets: SessionReviewBucket[] = Array.from({ length: bucketCount }, (_, index) => ({
+      bucketStartMs: startedAtMs + index * bucketMs,
+      bucketEndMs: Math.min(startedAtMs + (index + 1) * bucketMs, endedAtMs),
+      danmakuCount: 0,
+      activeSpeakerCount: 0,
+      giftCount: 0,
+      superChatCount: 0,
+      popularityPeak: null,
+      hasGap: false,
+    }))
+
+    const danmakuBuckets = database
+      .prepare(
+        `SELECT MAX(0, MIN(?, CAST((received_at_ms - ?) / ? AS INTEGER))) AS bucket_index,
+                COUNT(*) AS danmaku_count,
+                COUNT(DISTINCT local_user_key) AS active_speaker_count
+         FROM danmaku_events
+         WHERE session_id = ?
+         GROUP BY bucket_index`,
+      )
+      .all(lastBucketIndex, startedAtMs, bucketMs, sessionId) as SqlRow[]
+    for (const row of danmakuBuckets) {
+      const bucket = buckets[toNumber(row.bucket_index)]
+      if (bucket === undefined) continue
+      bucket.danmakuCount = toNumber(row.danmaku_count)
+      bucket.activeSpeakerCount = toNumber(row.active_speaker_count)
+    }
+
+    const metricBuckets = database
+      .prepare(
+        `SELECT MAX(0, MIN(?, CAST((bucket_start_ms - ?) / ? AS INTEGER))) AS bucket_index,
+                SUM(gift_count) AS gift_count,
+                SUM(super_chat_count) AS super_chat_count,
+                MAX(popularity_peak) AS popularity_peak
+         FROM metric_buckets
+         WHERE session_id = ?
+         GROUP BY bucket_index`,
+      )
+      .all(lastBucketIndex, startedAtMs, bucketMs, sessionId) as SqlRow[]
+    for (const row of metricBuckets) {
+      const bucket = buckets[toNumber(row.bucket_index)]
+      if (bucket === undefined) continue
+      bucket.giftCount = toNumber(row.gift_count)
+      bucket.superChatCount = toNumber(row.super_chat_count)
+      bucket.popularityPeak = nullableNumber(row.popularity_peak)
+    }
+
+    const gaps = database
+      .prepare(
+        `SELECT started_at_ms, ended_at_ms
+         FROM data_gaps
+         WHERE session_id = ?
+         ORDER BY started_at_ms ASC`,
+      )
+      .all(sessionId) as SqlRow[]
+    for (const gap of gaps) {
+      const gapStartedAtMs = toNumber(gap.started_at_ms)
+      const gapEndedAtMs = nullableNumber(gap.ended_at_ms) ?? endedAtMs
+      for (const bucket of buckets) {
+        if (gapStartedAtMs < bucket.bucketEndMs && gapEndedAtMs > bucket.bucketStartMs) {
+          bucket.hasGap = true
+        }
+      }
+    }
+
+    const repeatedDanmaku = (
+      database
+        .prepare(
+          `SELECT text, COUNT(*) AS event_count,
+                  COUNT(DISTINCT local_user_key) AS unique_user_count,
+                  MIN(received_at_ms) AS first_at_ms,
+                  MAX(received_at_ms) AS last_at_ms
+           FROM danmaku_events
+           WHERE session_id = ? AND text <> ''
+           GROUP BY text
+           HAVING COUNT(*) > 1
+           ORDER BY event_count DESC, last_at_ms DESC, text ASC
+           LIMIT 5`,
+        )
+        .all(sessionId) as SqlRow[]
+    ).map((row) => ({
+      text: toText(row.text),
+      count: toNumber(row.event_count),
+      uniqueUserCount: toNumber(row.unique_user_count),
+      firstAtMs: toNumber(row.first_at_ms),
+      lastAtMs: toNumber(row.last_at_ms),
+    }))
+
+    const peakDanmakuBucket = pickPeakBucket(buckets, 'danmakuCount')
+    const peakActiveSpeakerBucket = pickPeakBucket(buckets, 'activeSpeakerCount')
+    const totalDanmaku = toNumber(session.danmaku_count)
+    const topThreeDanmaku = [...buckets]
+      .sort((left, right) => right.danmakuCount - left.danmakuCount)
+      .slice(0, 3)
+      .reduce((sum, bucket) => sum + bucket.danmakuCount, 0)
+
+    return {
+      sessionId,
+      startedAtMs,
+      endedAtMs,
+      bucketMinutes,
+      totals: {
+        danmakuCount: totalDanmaku,
+        activeUserCount: toNumber(session.active_user_count),
+        giftCount: toNumber(session.gift_count),
+        superChatCount: toNumber(session.super_chat_count),
+        gapCount: toNumber(session.gap_count),
+        gapDurationMs: toNumber(session.gap_duration_ms),
+      },
+      buckets,
+      repeatedDanmaku,
+      mostRepeatedDanmaku: repeatedDanmaku[0] ?? null,
+      peakDanmakuBucket,
+      peakActiveSpeakerBucket,
+      topThreeDanmakuShare: totalDanmaku === 0 ? 0 : topThreeDanmaku / totalDanmaku,
+    }
+  }
+
   listDanmaku(sessionId: number, options: EventPageOptions): StoredDanmaku[] {
     return this.#queryDanmaku(sessionId, '', options)
   }
@@ -840,7 +1036,7 @@ export class LocalStore {
           `INSERT OR REPLACE INTO schema_migrations
            (version, name, checksum, applied_at_ms) VALUES (?, ?, ?, ?)`,
         )
-        .run(MIGRATION_VERSION, 'storage-worker-and-deletion-index', checksum, Date.now())
+        .run(MIGRATION_VERSION, 'session-review-covering-index', checksum, Date.now())
       database.exec(`PRAGMA user_version = ${MIGRATION_VERSION}`)
       database.exec('COMMIT')
     } catch (error) {

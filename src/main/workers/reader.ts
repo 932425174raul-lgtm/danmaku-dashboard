@@ -60,6 +60,8 @@ function runStorageReader(data: StorageReaderData): void {
       let result: unknown = null
       if (request.query === 'listSessions') {
         result = store.listSessions(request.payload.limit)
+      } else if (request.query === 'getSessionReview') {
+        result = store.getSessionReview(request.payload.sessionId)
       } else if (request.query === 'listDanmaku') {
         result = store.listDanmaku(request.payload.sessionId, request.payload.options)
       } else if (request.query === 'searchDanmaku') {

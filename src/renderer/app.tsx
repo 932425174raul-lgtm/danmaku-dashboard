@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEven
 
 import type {
   HistoryDanmakuView,
+  HistoryReviewBucketView,
+  HistoryReviewView,
   HistorySummaryView,
   LiveSnapshot,
   LiveStatus,
@@ -82,6 +84,23 @@ function formatDate(timestamp: number): string {
     minute: '2-digit',
     hour12: false,
   }).format(timestamp)
+}
+
+function formatReviewRange(bucket: HistoryReviewBucketView, sessionStartedAtMs: number): string {
+  const sessionDay = new Date(sessionStartedAtMs).toDateString()
+  const isSessionDay =
+    new Date(bucket.bucketStartMs).toDateString() === sessionDay &&
+    new Date(bucket.bucketEndMs).toDateString() === sessionDay
+  return isSessionDay
+    ? `${formatClock(bucket.bucketStartMs)}至${formatClock(bucket.bucketEndMs)}`
+    : `${formatDate(bucket.bucketStartMs)}至${formatDate(bucket.bucketEndMs)}`
+}
+
+function shortenText(text: string, maximumLength = 24): string {
+  const characters = Array.from(text)
+  return characters.length <= maximumLength
+    ? text
+    : `${characters.slice(0, maximumLength).join('')}…`
 }
 
 function formatMoney(milliCny: number): string {
@@ -207,6 +226,246 @@ function RankingCard({
   )
 }
 
+function ReviewBars({
+  buckets,
+  field,
+  label,
+  tone,
+  sessionStartedAtMs,
+}: {
+  buckets: HistoryReviewBucketView[]
+  field: 'danmakuCount' | 'activeSpeakerCount'
+  label: string
+  tone: 'warm' | 'cool'
+  sessionStartedAtMs: number
+}) {
+  const maximum = Math.max(1, ...buckets.map((bucket) => bucket[field]))
+  return (
+    <div className={`review-chart-row review-chart-${tone}`}>
+      <div className="review-chart-label">
+        <span>{label}</span>
+        <strong>{maximum.toLocaleString('zh-CN')}峰值</strong>
+      </div>
+      <div className="review-trend-bars" role="img" aria-label={`${label}分时趋势`}>
+        {buckets.map((bucket) => (
+          <span
+            className={bucket.hasGap ? 'review-trend-gap' : undefined}
+            key={bucket.bucketStartMs}
+            title={`${formatReviewRange(bucket, sessionStartedAtMs)}，${bucket[field].toLocaleString('zh-CN')}${field === 'danmakuCount' ? '条' : '人'}${bucket.hasGap ? '，存在数据缺口' : ''}`}
+          >
+            <i
+              style={{
+                height:
+                  bucket[field] === 0 ? '0%' : `${Math.max(2, (bucket[field] / maximum) * 100)}%`,
+              }}
+            />
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function HistoryReviewPanel({ review }: { review: HistoryReviewView }) {
+  const averagePerSpeaker =
+    review.totals.activeUserCount === 0
+      ? null
+      : (review.totals.danmakuCount / review.totals.activeUserCount).toFixed(1)
+  const peakDanmaku = review.peakDanmakuBucket
+  const peakSpeakers = review.peakActiveSpeakerBucket
+  const mostRepeated = review.mostRepeatedDanmaku
+  const concentrationPercent = Math.round(review.topThreeDanmakuShare * 100)
+
+  return (
+    <section className="history-review" aria-labelledby="history-review-title">
+      <div className="review-heading">
+        <div>
+          <p className="panel-kicker">观众反馈</p>
+          <h2 id="history-review-title">直播复盘</h2>
+        </div>
+        <span>{review.bucketMinutes}分钟一格</span>
+      </div>
+
+      <p className="review-boundary-note">
+        此处统计的是发过弹幕且能匿名去重的活跃发言人数，不是在线观众人数。结论只基于本地保存的互动数据，不包含直播画面和声音内容。
+      </p>
+
+      <dl className="review-overview">
+        <div>
+          <dt>本场弹幕</dt>
+          <dd>{review.totals.danmakuCount.toLocaleString('zh-CN')}</dd>
+          <span>条</span>
+        </div>
+        <div>
+          <dt>活跃发言人数</dt>
+          <dd>{review.totals.activeUserCount.toLocaleString('zh-CN')}</dd>
+          <span>本机匿名去重</span>
+        </div>
+        <div>
+          <dt>人均发言</dt>
+          <dd>{averagePerSpeaker ?? '不可计算'}</dd>
+          <span>{averagePerSpeaker === null ? '没有可去重的发言者' : '按已识别发言者计算'}</span>
+        </div>
+        <div className={review.totals.gapCount > 0 ? 'review-overview-warning' : undefined}>
+          <dt>数据完整性</dt>
+          <dd>{review.totals.gapCount === 0 ? '完整' : `${review.totals.gapCount}次缺口`}</dd>
+          <span>
+            {review.totals.gapCount === 0
+              ? '未记录到采集中断'
+              : `共${formatDuration(review.totals.gapDurationMs)}`}
+          </span>
+        </div>
+      </dl>
+
+      <section className="review-trend" aria-labelledby="review-trend-title">
+        <div className="review-section-heading">
+          <div>
+            <h3 id="review-trend-title">分时互动趋势</h3>
+            <p>找出观众最愿意参与的环节，再回看当时的主题和表达方式。</p>
+          </div>
+          <span>高度为各自指标相对值</span>
+        </div>
+        <ReviewBars
+          buckets={review.buckets}
+          field="danmakuCount"
+          label="弹幕量"
+          tone="warm"
+          sessionStartedAtMs={review.startedAtMs}
+        />
+        <ReviewBars
+          buckets={review.buckets}
+          field="activeSpeakerCount"
+          label="活跃发言人数"
+          tone="cool"
+          sessionStartedAtMs={review.startedAtMs}
+        />
+        <p className="review-trend-legend">
+          <i className="review-legend-warm" />
+          弹幕量
+          <i className="review-legend-cool" />
+          活跃发言人数
+          <i className="review-legend-gap" />
+          数据缺口
+        </p>
+      </section>
+
+      <dl className="review-findings">
+        <div>
+          <dt>弹幕最密集时段</dt>
+          <dd>
+            {peakDanmaku === null ? '暂无' : formatReviewRange(peakDanmaku, review.startedAtMs)}
+          </dd>
+          <span>
+            {peakDanmaku === null ? '本场没有保存弹幕' : `${peakDanmaku.danmakuCount}条弹幕`}
+          </span>
+        </div>
+        <div>
+          <dt>活跃发言人数峰值</dt>
+          <dd>
+            {peakSpeakers === null ? '暂无' : formatReviewRange(peakSpeakers, review.startedAtMs)}
+          </dd>
+          <span>
+            {peakSpeakers === null
+              ? '本场没有可识别发言者'
+              : `${peakSpeakers.activeSpeakerCount}人发言`}
+          </span>
+        </div>
+        <div>
+          <dt>前三高峰集中度</dt>
+          <dd>{concentrationPercent}%</dd>
+          <span>前三个高峰时格的弹幕占比</span>
+        </div>
+      </dl>
+
+      <div className="review-lower-grid">
+        <section className="review-repeated" aria-labelledby="review-repeated-title">
+          <div className="review-section-heading">
+            <div>
+              <h3 id="review-repeated-title">重复弹幕</h3>
+              <p>只统计完整文本完全相同且出现2次以上的弹幕。</p>
+            </div>
+            <span>TOP 5</span>
+          </div>
+          {review.repeatedDanmaku.length === 0 ? (
+            <p className="review-empty">没有出现两次以上的完整相同弹幕。</p>
+          ) : (
+            <ol>
+              {review.repeatedDanmaku.map((item) => (
+                <li key={item.text}>
+                  <p title={item.text}>{item.text}</p>
+                  <strong>{item.count}次</strong>
+                  <span>
+                    {item.uniqueUserCount}位已识别发言者 · {formatClock(item.firstAtMs)}至
+                    {formatClock(item.lastAtMs)}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+
+        <section className="review-advice" aria-labelledby="review-advice-title">
+          <div className="review-section-heading">
+            <div>
+              <h3 id="review-advice-title">调整建议</h3>
+              <p>建议都附带可回看的数据依据，不自动推断原因。</p>
+            </div>
+          </div>
+          <ol>
+            {peakDanmaku !== null ? (
+              <li>
+                <strong>建议回看{formatReviewRange(peakDanmaku, review.startedAtMs)}</strong>
+                <p>
+                  当时出现{peakDanmaku.danmakuCount}条弹幕、
+                  {peakDanmaku.activeSpeakerCount}
+                  位活跃发言者。记录当时的主题、话术或互动动作，下场重复观察。
+                </p>
+              </li>
+            ) : (
+              <li>
+                <strong>暂无可用时段建议</strong>
+                <p>本场没有保存普通弹幕，无法比较互动高峰。</p>
+              </li>
+            )}
+            {mostRepeated !== null && (
+              <li>
+                <strong>确认“{shortenText(mostRepeated.text)}”的语境</strong>
+                <p>
+                  这条弹幕重复{mostRepeated.count}
+                  次。建议判断它是共鸣、提问还是提醒，程序未读取直播内容，不自动分类。
+                </p>
+              </li>
+            )}
+            {review.totals.danmakuCount > 0 && (
+              <li>
+                <strong>
+                  {review.buckets.length <= 3
+                    ? '结合整场回看'
+                    : concentrationPercent >= 50
+                      ? '复核高峰前后的节奏'
+                      : '按主题切换点逐段复盘'}
+                </strong>
+                <p>
+                  {review.buckets.length <= 3
+                    ? `本场只有${review.buckets.length}个时间格，前三高峰集中度的区分度有限。`
+                    : concentrationPercent >= 50
+                      ? `前三个高峰时格贡献全场${concentrationPercent}%的弹幕，互动较集中。`
+                      : `前三个高峰时格贡献全场${concentrationPercent}%的弹幕，互动分布较均匀。`}
+                </p>
+              </li>
+            )}
+          </ol>
+          {review.totals.gapCount > 0 && (
+            <p className="review-gap-warning">
+              本场存在{review.totals.gapCount}次数据缺口，缺口时段的弹幕和活跃发言人数可能被低估。
+            </p>
+          )}
+        </section>
+      </div>
+    </section>
+  )
+}
+
 export function App() {
   const [snapshot, setSnapshot] = useState<LiveSnapshot | null>(null)
   const [platform, setPlatform] = useState<Platform>('bilibili')
@@ -222,6 +481,8 @@ export function App() {
   const [historyError, setHistoryError] = useState<string | null>(null)
   const [selectedSession, setSelectedSession] = useState<HistorySummaryView | null>(null)
   const [historyDanmaku, setHistoryDanmaku] = useState<HistoryDanmakuView[]>([])
+  const [historyReview, setHistoryReview] = useState<HistoryReviewView | null>(null)
+  const [historyReviewError, setHistoryReviewError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [appliedSearchQuery, setAppliedSearchQuery] = useState('')
   const [historyDetailLoading, setHistoryDetailLoading] = useState(false)
@@ -230,6 +491,7 @@ export function App() {
   const [deletePending, setDeletePending] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
   const previousTotalRef = useRef(0)
+  const historyRequestRef = useRef(0)
 
   useEffect(() => {
     let active = true
@@ -321,23 +583,32 @@ export function App() {
   }
 
   async function openSession(session: HistorySummaryView): Promise<void> {
+    const requestId = historyRequestRef.current + 1
+    historyRequestRef.current = requestId
     setSelectedSession(session)
     setSearchQuery('')
     setAppliedSearchQuery('')
     setHistoryDetailLoading(true)
     setHistoryError(null)
+    setHistoryReview(null)
+    setHistoryReviewError(null)
     setHistoryHasMore(false)
-    try {
-      const rows = await window.danmakuApp.history.listDanmaku(session.id)
-      setHistoryDanmaku(rows)
-      setHistoryHasMore(rows.length === 100)
-    } catch {
+    const [danmakuResult, reviewResult] = await Promise.allSettled([
+      window.danmakuApp.history.listDanmaku(session.id),
+      window.danmakuApp.history.getReview(session.id),
+    ])
+    if (historyRequestRef.current !== requestId) return
+    if (danmakuResult.status === 'fulfilled') {
+      setHistoryDanmaku(danmakuResult.value)
+      setHistoryHasMore(danmakuResult.value.length === 100)
+    } else {
       setHistoryError('本场弹幕暂时无法读取。')
       setHistoryDanmaku([])
       setHistoryHasMore(false)
-    } finally {
-      setHistoryDetailLoading(false)
     }
+    if (reviewResult.status === 'fulfilled') setHistoryReview(reviewResult.value)
+    else setHistoryReviewError('本场复盘暂时无法生成，原始弹幕仍可查看。')
+    setHistoryDetailLoading(false)
   }
 
   async function searchHistory(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -398,6 +669,7 @@ export function App() {
     if (selectedSession?.id === deleteTarget.id) {
       setSelectedSession(null)
       setHistoryDanmaku([])
+      setHistoryReview(null)
     }
     setDeleteTarget(null)
   }
@@ -879,7 +1151,7 @@ export function App() {
                     <dd>{selectedSession.danmakuCount.toLocaleString('zh-CN')}</dd>
                   </div>
                   <div>
-                    <dt>活跃人数</dt>
+                    <dt>活跃发言人数</dt>
                     <dd>{selectedSession.activeUserCount.toLocaleString('zh-CN')}</dd>
                   </div>
                   <div>
@@ -899,6 +1171,18 @@ export function App() {
                     </dd>
                   </div>
                 </dl>
+                {historyReviewError !== null && (
+                  <p className="history-error review-read-error" role="alert">
+                    {historyReviewError}
+                  </p>
+                )}
+                {historyDetailLoading && historyReview === null ? (
+                  <p className="review-loading" aria-live="polite">
+                    正在生成本场复盘…
+                  </p>
+                ) : historyReview !== null ? (
+                  <HistoryReviewPanel review={historyReview} />
+                ) : null}
                 <form className="history-search" onSubmit={(event) => void searchHistory(event)}>
                   <label htmlFor="history-search">搜索本场弹幕</label>
                   <div>

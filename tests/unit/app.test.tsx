@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type {
   DanmakuAppApi,
+  HistoryReviewView,
   HistorySummaryView,
   LiveSnapshot,
 } from '../../src/contracts/ipc-v1/live'
@@ -63,6 +64,80 @@ const historySession: HistorySummaryView = {
   superChatCount: 2,
 }
 
+const historyReview: HistoryReviewView = {
+  sessionId: 21,
+  startedAtMs: 1_700_000_000_000,
+  endedAtMs: 1_700_000_600_000,
+  bucketMinutes: 5,
+  totals: {
+    danmakuCount: 321,
+    activeUserCount: 48,
+    giftCount: 6,
+    superChatCount: 2,
+    gapCount: 1,
+    gapDurationMs: 10_000,
+  },
+  buckets: [
+    {
+      bucketStartMs: 1_700_000_000_000,
+      bucketEndMs: 1_700_000_300_000,
+      danmakuCount: 120,
+      activeSpeakerCount: 28,
+      giftCount: 3,
+      superChatCount: 1,
+      popularityPeak: 88_000,
+      hasGap: false,
+    },
+    {
+      bucketStartMs: 1_700_000_300_000,
+      bucketEndMs: 1_700_000_600_000,
+      danmakuCount: 201,
+      activeSpeakerCount: 36,
+      giftCount: 3,
+      superChatCount: 1,
+      popularityPeak: 96_000,
+      hasGap: true,
+    },
+  ],
+  repeatedDanmaku: [
+    {
+      text: '再讲一遍',
+      count: 18,
+      uniqueUserCount: 12,
+      firstAtMs: 1_700_000_320_000,
+      lastAtMs: 1_700_000_550_000,
+    },
+  ],
+  mostRepeatedDanmaku: {
+    text: '再讲一遍',
+    count: 18,
+    uniqueUserCount: 12,
+    firstAtMs: 1_700_000_320_000,
+    lastAtMs: 1_700_000_550_000,
+  },
+  peakDanmakuBucket: {
+    bucketStartMs: 1_700_000_300_000,
+    bucketEndMs: 1_700_000_600_000,
+    danmakuCount: 201,
+    activeSpeakerCount: 36,
+    giftCount: 3,
+    superChatCount: 1,
+    popularityPeak: 96_000,
+    hasGap: true,
+  },
+  peakActiveSpeakerBucket: {
+    bucketStartMs: 1_700_000_300_000,
+    bucketEndMs: 1_700_000_600_000,
+    danmakuCount: 201,
+    activeSpeakerCount: 36,
+    giftCount: 3,
+    superChatCount: 1,
+    popularityPeak: 96_000,
+    hasGap: true,
+  },
+  topThreeDanmakuShare: 0.63,
+}
+
 function installApi(overrides: Partial<DanmakuAppApi['history']> = {}) {
   let listener: ((snapshot: LiveSnapshot) => void) | undefined
   const api: DanmakuAppApi = {
@@ -78,6 +153,7 @@ function installApi(overrides: Partial<DanmakuAppApi['history']> = {}) {
     },
     history: {
       list: vi.fn().mockResolvedValue([historySession]),
+      getReview: vi.fn().mockResolvedValue(historyReview),
       listDanmaku: vi.fn().mockResolvedValue([
         {
           id: 91,
@@ -206,6 +282,22 @@ describe('App', () => {
 
     expect(api.history.deleteSession).toHaveBeenCalledWith(21)
     expect(await screen.findByText('还没有历史场次')).toBeInTheDocument()
+  })
+
+  it('历史场次展示观众反馈复盘、分时趋势和可追溯建议', async () => {
+    installApi()
+    render(<App />)
+    await screen.findByText('实时弹幕')
+
+    await userEvent.click(screen.getByRole('button', { name: '历史' }))
+    await userEvent.click(await screen.findByRole('button', { name: /测试直播间/ }))
+
+    expect(await screen.findByRole('heading', { name: '直播复盘' })).toBeInTheDocument()
+    expect(screen.getByText('活跃发言人数峰值')).toBeInTheDocument()
+    expect(screen.getByText('再讲一遍')).toBeInTheDocument()
+    expect(screen.getByText(/不是在线观众人数/)).toBeInTheDocument()
+    expect(screen.getByText(/存在1次数据缺口/)).toBeInTheDocument()
+    expect(screen.getByText(/建议回看/)).toBeInTheDocument()
   })
 
   it('暂停跟随后提示新消息，并可一键回到最新', async () => {

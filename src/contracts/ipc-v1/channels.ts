@@ -7,6 +7,7 @@ export const LIVE_IPC_CHANNELS = {
 
 export const HISTORY_IPC_CHANNELS = {
   list: 'history:list',
+  getReview: 'history:get-review',
   listDanmaku: 'history:list-danmaku',
   searchDanmaku: 'history:search-danmaku',
   prepareDelete: 'history:prepare-delete',

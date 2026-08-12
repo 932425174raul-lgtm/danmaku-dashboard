@@ -32,7 +32,39 @@ class FakeReaderWorker extends EventEmitter implements StorageReaderWorkerPort {
                   medalLevel: null,
                 },
               ]
-            : null,
+            : request.query === 'getSessionReview'
+              ? {
+                  sessionId: 3,
+                  startedAtMs: 1_780_000_000_000,
+                  endedAtMs: 1_780_000_600_000,
+                  bucketMinutes: 5,
+                  totals: {
+                    danmakuCount: 2,
+                    activeUserCount: 1,
+                    giftCount: 0,
+                    superChatCount: 0,
+                    gapCount: 0,
+                    gapDurationMs: 0,
+                  },
+                  buckets: [
+                    {
+                      bucketStartMs: 1_780_000_000_000,
+                      bucketEndMs: 1_780_000_300_000,
+                      danmakuCount: 2,
+                      activeSpeakerCount: 1,
+                      giftCount: 0,
+                      superChatCount: 0,
+                      popularityPeak: null,
+                      hasGap: false,
+                    },
+                  ],
+                  repeatedDanmaku: [],
+                  mostRepeatedDanmaku: null,
+                  peakDanmakuBucket: null,
+                  peakActiveSpeakerBucket: null,
+                  topThreeDanmakuShare: 0,
+                }
+              : null,
       })
     })
   }
@@ -69,6 +101,11 @@ describe('StorageReaderClient', () => {
       },
     })
     expect(rows).toMatchObject([{ id: 8, text: '合成弹幕' }])
+    expect(await client.getSessionReview(3)).toMatchObject({ sessionId: 3, bucketMinutes: 5 })
+    expect(worker.commands[1]).toMatchObject({
+      query: 'getSessionReview',
+      payload: { sessionId: 3 },
+    })
     await client.shutdown()
   })
 })

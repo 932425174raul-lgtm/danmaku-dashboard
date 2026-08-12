@@ -98,8 +98,49 @@ export interface HistoryPageCursor {
   id: number
 }
 
+export interface HistoryReviewBucketView {
+  bucketStartMs: number
+  bucketEndMs: number
+  danmakuCount: number
+  activeSpeakerCount: number
+  giftCount: number
+  superChatCount: number
+  popularityPeak: number | null
+  hasGap: boolean
+}
+
+export interface HistoryRepeatedDanmakuView {
+  text: string
+  count: number
+  uniqueUserCount: number
+  firstAtMs: number
+  lastAtMs: number
+}
+
+export interface HistoryReviewView {
+  sessionId: number
+  startedAtMs: number
+  endedAtMs: number
+  bucketMinutes: number
+  totals: {
+    danmakuCount: number
+    activeUserCount: number
+    giftCount: number
+    superChatCount: number
+    gapCount: number
+    gapDurationMs: number
+  }
+  buckets: HistoryReviewBucketView[]
+  repeatedDanmaku: HistoryRepeatedDanmakuView[]
+  mostRepeatedDanmaku: HistoryRepeatedDanmakuView | null
+  peakDanmakuBucket: HistoryReviewBucketView | null
+  peakActiveSpeakerBucket: HistoryReviewBucketView | null
+  topThreeDanmakuShare: number
+}
+
 export interface HistoryApi {
   list(): Promise<HistorySummaryView[]>
+  getReview(sessionId: number): Promise<HistoryReviewView | null>
   listDanmaku(sessionId: number, before?: HistoryPageCursor): Promise<HistoryDanmakuView[]>
   searchDanmaku(
     sessionId: number,

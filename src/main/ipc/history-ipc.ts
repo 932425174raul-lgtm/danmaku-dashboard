@@ -75,6 +75,11 @@ export function registerHistoryIpc(
       ...(parsed.before === undefined ? {} : { before: parsed.before }),
     })
   })
+  ipcMain.handle(HISTORY_IPC_CHANNELS.getReview, async (event, input: unknown) => {
+    if (!trusted(event)) throw new Error('UNTRUSTED_IPC_SENDER')
+    const parsed = sessionInputSchema.parse(input)
+    return reader.getSessionReview(parsed.sessionId)
+  })
   ipcMain.handle(HISTORY_IPC_CHANNELS.searchDanmaku, async (event, input: unknown) => {
     if (!trusted(event)) throw new Error('UNTRUSTED_IPC_SENDER')
     const parsed = searchInputSchema.parse(input)

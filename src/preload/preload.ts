@@ -19,6 +19,8 @@ const api: DanmakuAppApi = {
   }),
   history: Object.freeze({
     list: () => ipcRenderer.invoke(HISTORY_IPC_CHANNELS.list),
+    getReview: (sessionId: number) =>
+      ipcRenderer.invoke(HISTORY_IPC_CHANNELS.getReview, { sessionId }),
     listDanmaku: (sessionId: number, before?: HistoryPageCursor) =>
       ipcRenderer.invoke(HISTORY_IPC_CHANNELS.listDanmaku, {
         sessionId,

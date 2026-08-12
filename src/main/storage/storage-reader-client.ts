@@ -2,11 +2,12 @@ import { Worker } from 'node:worker_threads'
 
 import { z } from 'zod'
 
-import type { EventPageOptions, SessionSummary, StoredDanmaku } from './local-store'
+import type { EventPageOptions, SessionReview, SessionSummary, StoredDanmaku } from './local-store'
 import type { StorageReaderQuery } from '../workers/storage-reader-protocol'
 
 export interface StorageReader {
   listSessions(limit?: number): Promise<SessionSummary[]>
+  getSessionReview(sessionId: number): Promise<SessionReview | null>
   listDanmaku(sessionId: number, options: EventPageOptions): Promise<StoredDanmaku[]>
   searchDanmaku(
     sessionId: number,
@@ -93,6 +94,51 @@ const sessionSummarySchema = z
     gapDurationMs: z.number().int().nonnegative(),
   })
   .strict()
+const reviewBucketSchema = z
+  .object({
+    bucketStartMs: z.number().int().nonnegative(),
+    bucketEndMs: z.number().int().nonnegative(),
+    danmakuCount: z.number().int().nonnegative(),
+    activeSpeakerCount: z.number().int().nonnegative(),
+    giftCount: z.number().int().nonnegative(),
+    superChatCount: z.number().int().nonnegative(),
+    popularityPeak: z.number().int().nonnegative().nullable(),
+    hasGap: z.boolean(),
+  })
+  .strict()
+const repeatedDanmakuSchema = z
+  .object({
+    text: z.string().max(2_000),
+    count: z.number().int().min(2),
+    uniqueUserCount: z.number().int().nonnegative(),
+    firstAtMs: z.number().int().nonnegative(),
+    lastAtMs: z.number().int().nonnegative(),
+  })
+  .strict()
+const sessionReviewSchema = z
+  .object({
+    sessionId: z.number().int().positive(),
+    startedAtMs: z.number().int().nonnegative(),
+    endedAtMs: z.number().int().nonnegative(),
+    bucketMinutes: z.number().int().min(5),
+    totals: z
+      .object({
+        danmakuCount: z.number().int().nonnegative(),
+        activeUserCount: z.number().int().nonnegative(),
+        giftCount: z.number().int().nonnegative(),
+        superChatCount: z.number().int().nonnegative(),
+        gapCount: z.number().int().nonnegative(),
+        gapDurationMs: z.number().int().nonnegative(),
+      })
+      .strict(),
+    buckets: z.array(reviewBucketSchema).min(1).max(144),
+    repeatedDanmaku: z.array(repeatedDanmakuSchema).max(5),
+    mostRepeatedDanmaku: repeatedDanmakuSchema.nullable(),
+    peakDanmakuBucket: reviewBucketSchema.nullable(),
+    peakActiveSpeakerBucket: reviewBucketSchema.nullable(),
+    topThreeDanmakuShare: z.number().min(0).max(1),
+  })
+  .strict()
 
 const defaultWorkerFactory: StorageReaderWorkerFactory = (filename, options) =>
   new Worker(filename, options)
@@ -138,6 +184,18 @@ export class StorageReaderClient implements StorageReader {
     })) as StoredDanmaku[]
   }
 
+  async getSessionReview(sessionId: number): Promise<SessionReview | null> {
+    return (await this.#request(
+      {
+        kind: 'reader-query',
+        id: this.#takeId(),
+        query: 'getSessionReview',
+        payload: { sessionId },
+      },
+      Math.max(this.#timeoutMs, 30_000),
+    )) as SessionReview | null
+  }
+
   async searchDanmaku(
     sessionId: number,
     query: string,
@@ -172,13 +230,13 @@ export class StorageReaderClient implements StorageReader {
     return id
   }
 
-  #request(query: StorageReaderQuery): Promise<unknown> {
+  #request(query: StorageReaderQuery, timeoutMs = this.#timeoutMs): Promise<unknown> {
     if (this.#closed) return Promise.reject(new StorageReadError())
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.#pending.delete(query.id)
         reject(new StorageReadError())
-      }, this.#timeoutMs)
+      }, timeoutMs)
       this.#pending.set(query.id, { query: query.query, resolve, reject, timer })
       this.#worker.postMessage(query)
     })
@@ -202,9 +260,11 @@ export class StorageReaderClient implements StorageReader {
     const result =
       pending.query === 'listSessions'
         ? z.array(sessionSummarySchema).safeParse(response.data.result)
-        : pending.query === 'listDanmaku' || pending.query === 'searchDanmaku'
-          ? z.array(danmakuSchema).safeParse(response.data.result)
-          : z.null().safeParse(response.data.result)
+        : pending.query === 'getSessionReview'
+          ? sessionReviewSchema.nullable().safeParse(response.data.result)
+          : pending.query === 'listDanmaku' || pending.query === 'searchDanmaku'
+            ? z.array(danmakuSchema).safeParse(response.data.result)
+            : z.null().safeParse(response.data.result)
     if (!result.success) {
       pending.reject(new StorageReadError())
       return
