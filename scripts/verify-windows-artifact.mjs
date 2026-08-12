@@ -14,6 +14,11 @@ function assert(condition, code) {
   if (!condition) throw new Error(code)
 }
 
+function normalizeArchiveEntry(entry) {
+  const normalized = entry.replaceAll('\\', '/')
+  return normalized.startsWith('/') ? normalized : `/${normalized}`
+}
+
 function verifyPeX64(executable) {
   assert(executable.subarray(0, 2).equals(Buffer.from('MZ')), 'EXECUTABLE_NOT_PE')
   const peOffset = executable.readUInt32LE(0x3c)
@@ -87,7 +92,7 @@ async function main() {
     assert(String.fromCharCode(fuseWire[index]) === expected, `FUSE_${index}_MISMATCH`)
   }
 
-  const asarEntries = listPackage(asarPath, { isPack: false })
+  const asarEntries = listPackage(asarPath, { isPack: false }).map(normalizeArchiveEntry)
   for (const requiredEntry of [
     '/.vite/build/main.js',
     '/.vite/build/preload.js',
