@@ -14,7 +14,7 @@ import {
 import { BilibiliCollector } from './collector/bilibili-collector'
 import { CollectionService } from './collector/collection-service'
 import { DouyinBrowserCollector } from './collector/douyin-browser-collector'
-import { parseLaunchMode } from './environment'
+import { getDesktopUserAgent, parseLaunchMode } from './environment'
 import { registerHistoryIpc } from './ipc/history-ipc'
 import { registerLiveIpc } from './ipc/live-ipc'
 import { installRendererProtocol, registerRendererScheme } from './lifecycle/app-protocol'
@@ -207,7 +207,7 @@ async function runApplication(): Promise<void> {
     () =>
       new BilibiliCollector({
         bootstrap: new BilibiliBootstrapClient({
-          userAgent: `Mozilla/5.0 (Macintosh; Apple Silicon Mac OS X) AppleWebKit/537.36 Chrome/${process.versions.chrome} Safari/537.36`,
+          userAgent: getDesktopUserAgent(process.platform, process.versions.chrome),
         }),
       }),
     () => new DouyinBrowserCollector(hmacKey),
@@ -226,12 +226,24 @@ async function runApplication(): Promise<void> {
     MAIN_WINDOW_VITE_DEV_SERVER_URL,
   )
   mainWindow = await createMainWindow()
-  const trayIcon = nativeImage
-    .createFromDataURL(
-      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAALElEQVR4AWMYBaNgFIyCUQAzMDD8Z2Bg+I8uRjMYjWAwGsFgNIIBDAwA3pQD/u87BlYAAAAASUVORK5CYII=',
-    )
-    .resize({ width: 16, height: 16 })
-  trayIcon.setTemplateImage(true)
+  const trayIcon =
+    process.platform === 'win32'
+      ? nativeImage
+          .createFromPath(
+            app.isPackaged
+              ? join(process.resourcesPath, 'tray-windows.png')
+              : join(app.getAppPath(), 'assets', 'tray-windows.png'),
+          )
+          .resize({
+            width: 24,
+            height: 24,
+          })
+      : nativeImage
+          .createFromDataURL(
+            'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAALElEQVR4AWMYBaNgFIyCUQAzMDD8Z2Bg+I8uRjMYjWAwGsFgNIIBDAwA3pQD/u87BlYAAAAASUVORK5CYII=',
+          )
+          .resize({ width: 16, height: 16 })
+  if (process.platform === 'darwin') trayIcon.setTemplateImage(true)
   tray = new Tray(trayIcon)
   tray.setToolTip('弹幕看板')
   const updateTray = (snapshot = liveService?.getSnapshot()) => {

@@ -4,11 +4,11 @@
 
 ## Platform
 
-web
+desktop
 
 ## Users
 
-需要在Apple Silicon Mac上观察公开直播间弹幕的直播运营者、内容创作者和研究者。他们通常在直播过程中持续查看弹幕流和关键统计，并在结束后回看本机历史。
+需要在macOS或Windows设备上观察公开直播间弹幕的直播运营者、内容创作者和研究者。他们通常在直播过程中持续查看弹幕流和关键统计，并在结束后回看本机历史。
 
 ## Product Purpose
 
@@ -20,7 +20,7 @@ web
 
 ## Operating Context
 
-用户会在直播开始前输入房间号或公开链接，在直播期间同时查看实时弹幕和看板，必要时暂停自动跟随；结束后进入历史页搜索或删除整场记录。窗口关闭后，应用通过macOS菜单栏继续运行。
+用户会在直播开始前输入房间号或公开链接，在直播期间同时查看实时弹幕和看板，必要时暂停自动跟随；结束后进入历史页搜索或删除整场记录。窗口关闭后，应用通过系统托盘继续运行。
 
 ## Capabilities and Constraints
 
@@ -29,7 +29,7 @@ web
 - 抖音第一版只保证普通弹幕，其他未验证指标不能按零值显示。
 - SQLite历史支持分页、全文搜索和整场删除。
 - 不读取Cookie、账号登录状态或原始用户ID。
-- 第一版面向macOS 13及以上的Apple Silicon Mac。
+- 第一版面向macOS 13及以上的Apple Silicon Mac，以及Windows 10或Windows 11 x64设备。
 
 ## Brand Commitments
 
@@ -39,7 +39,7 @@ web
 
 ## Evidence on Hand
 
-- 已有完整React界面、响应式布局、真实协议采集、SQLite历史和macOS安装包。
+- 已有完整React界面、响应式布局、真实协议采集、SQLite历史、macOS安装包与Windows便携包构建链。
 - 项目内只有合成测试数据，不得在设计稿或文档中虚构真实房间、用户或弹幕内容。
 
 ## Product Principles

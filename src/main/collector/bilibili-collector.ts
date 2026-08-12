@@ -1,6 +1,7 @@
 import WebSocket from 'ws'
 
 import type { DomainEvent } from '../../domain/events'
+import { getDesktopUserAgent } from '../environment'
 import {
   BilibiliBootstrapError,
   BilibiliBootstrapClient,
@@ -131,8 +132,7 @@ export class BilibiliCollector {
     this.bootstrap =
       options.bootstrap ??
       new BilibiliBootstrapClient({
-        userAgent:
-          'Mozilla/5.0 (Macintosh; Apple Silicon Mac OS X 13_0) AppleWebKit/537.36 Chrome/149.0.0.0 Safari/537.36',
+        userAgent: getDesktopUserAgent(process.platform, process.versions.chrome),
       })
     this.createWebSocket =
       options.createWebSocket ??

@@ -9,6 +9,7 @@ import {
   DouyinProtocolError,
 } from '../protocol/douyin-web-v1/push-frame'
 import type { DouyinCollector, DouyinCollectorCallbacks } from './douyin-collector'
+import { getDesktopUserAgent } from '../environment'
 
 const websocketCreatedSchema = z.object({
   requestId: z.string().min(1),
@@ -85,10 +86,7 @@ export class DouyinBrowserCollector implements DouyinCollector {
     })
     this.window = window
     window.webContents.setAudioMuted(true)
-    window.webContents.setUserAgent(
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
-        '(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
-    )
+    window.webContents.setUserAgent(getDesktopUserAgent(process.platform, process.versions.chrome))
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     window.webContents.on('will-attach-webview', (event) => event.preventDefault())
     window.webContents.on('will-navigate', (event, navigationUrl) => {

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="600" viewBox="0 0 1600 600" role="img" aria-labelledby="title description">
   <title id="title">弹幕看板</title>
-  <desc id="description">一个面向Apple Silicon Mac的本地实时弹幕与数据看板。</desc>
+  <desc id="description">一个面向macOS和Windows的本地实时弹幕与数据看板。</desc>
 
   <rect width="1600" height="600" rx="28" fill="#0a090c"/>
   <rect x="1" y="1" width="1598" height="598" rx="27" fill="none" stroke="#2a272e" stroke-width="2"/>
@@ -25,10 +25,10 @@
     <text x="378" y="406" fill="#f1eee8" font-size="21" font-weight="600">数据保存在本机</text>
     <text x="378" y="444" fill="#88817a" font-size="19">搜索、分页与整场删除</text>
 
-    <text x="650" y="406" fill="#f1eee8" font-size="21" font-weight="600">Apple Silicon</text>
-    <text x="650" y="444" fill="#88817a" font-size="19">macOS 13或更高版本</text>
+    <text x="650" y="406" fill="#f1eee8" font-size="21" font-weight="600">macOS + Windows</text>
+    <text x="650" y="444" fill="#88817a" font-size="19">Apple Silicon / x64</text>
 
-    <text x="98" y="526" fill="#88817a" font-size="18">匿名连接公开直播间 · 不读取Cookie · 关闭窗口后可在菜单栏继续采集</text>
+    <text x="98" y="526" fill="#88817a" font-size="18">匿名连接公开直播间 · 不读取Cookie · 关闭窗口后可在系统托盘继续采集</text>
   </g>
 
   <g fill="none" stroke-linecap="round" stroke-linejoin="round">

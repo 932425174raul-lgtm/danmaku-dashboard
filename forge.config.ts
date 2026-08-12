@@ -6,6 +6,7 @@ import type { ForgeConfig } from '@electron-forge/shared-types'
 
 import { hardenMacosPlist } from './scripts/harden-macos-plist'
 import { HdiutilDmgMaker } from './scripts/maker-dmg'
+import { WindowsZipMaker } from './scripts/maker-windows-zip'
 
 const config: ForgeConfig = {
   packagerConfig: {
@@ -14,8 +15,9 @@ const config: ForgeConfig = {
     appCategoryType: 'public.app-category.utilities',
     buildVersion: '1',
     darwinDarkModeSupport: true,
-    icon: 'assets/icon.icns',
+    icon: 'assets/icon',
     electronZipDir: resolve('.electron-zip-cache'),
+    extraResource: ['assets/tray-windows.png'],
     extendInfo: {
       LSMinimumSystemVersion: '13.0',
     },
@@ -34,12 +36,15 @@ const config: ForgeConfig = {
   rebuildConfig: {},
   hooks: {
     packageAfterCopy: async (_config, buildPath, _electronVersion, platform) => {
-      if (platform !== 'darwin') {
-        throw new Error(`M0 only supports darwin packaging, received ${platform}`)
-      }
-
-      await hardenMacosPlist(buildPath)
-      await flipFuses(resolve(buildPath, '../../MacOS/Electron'), {
+      const electronBinary =
+        platform === 'darwin'
+          ? resolve(buildPath, '../../MacOS/Electron')
+          : platform === 'win32'
+            ? resolve(buildPath, '../../electron.exe')
+            : null
+      if (electronBinary === null) throw new Error(`UNSUPPORTED_PACKAGE_PLATFORM_${platform}`)
+      if (platform === 'darwin') await hardenMacosPlist(buildPath)
+      await flipFuses(electronBinary, {
         version: FuseVersion.V1,
         [FuseV1Options.RunAsNode]: false,
         [FuseV1Options.EnableCookieEncryption]: true,
@@ -54,7 +59,7 @@ const config: ForgeConfig = {
       })
     },
   },
-  makers: [new HdiutilDmgMaker()],
+  makers: [new HdiutilDmgMaker(), new WindowsZipMaker()],
   plugins: [
     new VitePlugin({
       concurrent: 2,

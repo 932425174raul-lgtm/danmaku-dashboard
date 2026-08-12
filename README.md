@@ -2,7 +2,7 @@
 
 # 弹幕看板
 
-弹幕看板是一个运行在Apple Silicon Mac上的本地桌面程序。它可以匿名连接B站或抖音公开直播间，实时显示弹幕与现场指标，同时把历史数据保存到本机SQLite数据库。
+弹幕看板是一个运行在macOS与Windows上的本地桌面程序。它可以匿名连接B站或抖音公开直播间，实时显示弹幕与现场指标，同时把历史数据保存到本机SQLite数据库。
 
 这个项目适合需要在直播过程中观察观众反应，或在直播结束后搜索历史弹幕的内容创作者、直播运营者和研究者。它不要求输入平台Cookie，不依赖主播账号，也不把历史上传到外部服务。
 
@@ -30,7 +30,7 @@
 | 直播开始前 | 解析房间号或公开直播链接，B站房间未开播时继续等待 | 房间检查、等待开播、连接和失败原因 |
 | 直播进行中 | 接收公开弹幕消息，完成格式校验、去重、本地写入和实时统计 | 最近500条弹幕、弹幕速率、活跃用户、趋势、高频词与平台指标 |
 | 连接发生中断 | 轮换节点并自动重连，把无法保证完整性的区间记为数据缺口 | 恢复状态、缺口次数、开始时间和已有数据 |
-| 关闭主窗口 | 窗口隐藏，主进程、采集器和写入Worker继续运行 | macOS菜单栏仍显示采集状态，可重新打开看板或停止采集 |
+| 关闭主窗口 | 窗口隐藏，主进程、采集器和写入Worker继续运行 | macOS菜单栏或Windows系统托盘仍显示采集状态，可重新打开看板或停止采集 |
 | 直播结束后 | 保留已结束会话和弹幕索引 | 历史场次、摘要数据、分页弹幕、本场搜索和整场删除 |
 
 ### 实时弹幕
@@ -82,19 +82,19 @@
 2. 输入公开直播间号或直播链接，点击「开始采集」。
 3. 连接建立后，左侧弹幕流和右侧看板会随已写入事件更新。
 4. 需要查看较早弹幕时，向上滚动即可暂停自动跟随。
-5. 关闭窗口后，如果仍在采集，程序会留在macOS菜单栏。从菜单栏可以重新显示窗口、停止采集或退出程序。
+5. 关闭窗口后，如果仍在采集，程序会留在系统托盘。从托盘菜单可以重新显示窗口、停止采集或退出程序。
 6. 采集结束后，进入「历史」查看场次摘要、搜索弹幕或删除整场数据。
 
 ## 安装
 
 ### 系统要求
 
-| 项目 | 要求 |
-| --- | --- |
-| 计算机 | Apple Silicon Mac（M1、M2、M3、M4或后续芯片） |
-| 系统 | macOS 13.0或更高版本 |
-| 安装包 | `弹幕看板-<version>-arm64.dmg` |
-| Intel Mac | 当前没有提供x64或通用二进制版本 |
+| 系统 | 架构 | 发布产物 |
+| --- | --- | --- |
+| macOS 13.0或更高版本 | Apple Silicon | `弹幕看板-<version>-arm64.dmg` |
+| Windows 10或Windows 11 | x64 | `弹幕看板-win32-x64-<version>.zip` |
+
+Intel Mac、Windows ARM64和32位Windows当前不在支持范围。
 
 ### 通过DMG安装
 
@@ -104,27 +104,34 @@
 
 当前版本使用ad-hoc签名，没有Apple Developer ID签名和公证票据。如果macOS首次打开时拦截，请在Finder的「应用程序」目录中按住Control点击应用，选择「打开」，然后再确认一次。
 
+### Windows便携版
+
+1. 从GitHub Releases下载最新的Windows x64 ZIP。如果仓库还没有发布Release，可以下载Windows Actions中的构建产物，或按下文步骤自行构建。
+2. 把ZIP完整解压到一个可写目录，不要只从压缩包中拖出EXE。
+3. 运行目录中的`弹幕看板.exe`。
+
+Windows便携版暂时没有代码签名。SmartScreen首次运行时可能显示未知发布者，请只从本仓库的Release或Actions产物下载，并在确认来源后选择「更多信息」与「仍要运行」。
+
 ### 卸载
 
-把「弹幕看板」从「应用程序」移到废纸篓只会删除程序本体，不会自动删除已采集的历史。需要彻底清理时，请先退出程序，再删除下文列出的持久数据目录。
+在macOS删除应用，或在Windows删除便携版目录，都只会删除程序本体，不会自动删除已采集的历史。需要彻底清理时，请先退出程序，再删除下文列出的持久数据目录。
 
 ## 数据与隐私
 
 ### 本地数据位置
 
-| 内容 | 位置 |
-| --- | --- |
-| 持久数据目录 | `~/Library/Application Support/弹幕看板/` |
-| SQLite主数据库 | `~/Library/Application Support/弹幕看板/library.sqlite3` |
-| 本地用户去重密钥密文 | `~/Library/Application Support/弹幕看板/identity-key` |
-| Chromium可重建缓存 | `~/Library/Caches/com.songjinzhao.danmaku-dashboard/Chromium/` |
-| Electron日志目录 | `~/Library/Logs/弹幕看板/` |
+| 系统 | 持久数据目录 | Chromium会话数据 |
+| --- | --- | --- |
+| macOS | `~/Library/Application Support/弹幕看板/` | `~/Library/Caches/com.songjinzhao.danmaku-dashboard/Chromium/` |
+| Windows | `%APPDATA%\弹幕看板\` | `%APPDATA%\弹幕看板\Chromium\` |
+
+SQLite主数据库名为`library.sqlite3`，本地用户去重密钥密文名为`identity-key`，两者都位于对应系统的持久数据目录。
 
 ### 隐私边界
 
 - 程序只请求平台公开直播所需的网络端点，不读取浏览器Cookie或账号登录状态。
 - 原始用户ID只在协议规范化边界中短暂存在。数据库使用本机随机密钥生成的HMAC标识去重，不保存平台原始用户ID。
-- HMAC密钥由macOS `safeStorage`加密后保存，明文密钥不进入日志、IPC或测试产物。
+- HMAC密钥由Electron `safeStorage`使用macOS钥匙串或Windows DPAPI加密后保存，明文密钥不进入日志、IPC或测试产物。
 - 历史、搜索词和弹幕正文不会被自动上传。第一版也不启动Electron自动崩溃上报。
 - 日志不记录Cookie、临时令牌、原始用户ID、弹幕正文、搜索词或本地密钥。
 - 平台匿名协议无法稳定提供的指标会显示为不可用，不会使用用户Cookie绕过验证码、设备校验或平台访问控制。
@@ -152,12 +159,12 @@ flowchart LR
 
 | 层级 | 选择 | 职责 |
 | --- | --- | --- |
-| 桌面容器 | Electron 43 | 主窗口、macOS菜单栏、单实例、本地路径与应用生命周期 |
+| 桌面容器 | Electron 43 | 主窗口、系统托盘、单实例、本地路径与应用生命周期 |
 | 界面 | React 19、TypeScript 6、Vite 8 | 实时弹幕、数据看板、历史与响应式界面 |
 | 协议边界 | WebSocket、Zod | 公开直播协议连接、字段校验、统一事件转换与错误限界 |
 | 存储 | Electron内置`node:sqlite`、WAL、FTS5 trigram | 会话、事件、统计投影、中文子串搜索与迁移备份 |
 | 隔离 | Electron sandbox、窄preload API、独立读写Worker | 限制渲染进程权限，避免数据库工作阻塞WebSocket接收和界面更新 |
-| 验证 | Vitest、React Testing Library、Playwright、macOS系统工具 | 单元、数据库集成、界面、隐私和最终产物验证 |
+| 验证 | Vitest、React Testing Library、Playwright、平台产物检查 | 单元、数据库集成、界面、隐私和最终产物验证 |
 
 ### 项目目录
 
@@ -187,7 +194,7 @@ docs/
 
 ### 环境
 
-- Apple Silicon Mac。开发界面可以在其他环境编译，但`.app`、DMG和系统验收依赖macOS。
+- Apple Silicon Mac或Windows x64开发机。DMG与macOS系统验收依赖macOS，Windows运行时验收依赖Windows。
 - Node.js 24.14.1。
 - npm 11.11.0。
 
@@ -217,10 +224,10 @@ npm start
 
 ```bash
 npm run make:mac
-npm run test:package
+npm run test:package:mac
 ```
 
-`make:mac`会构建主进程、preload、两个SQLite Worker和React界面，然后生成ad-hoc签名的Apple Silicon应用和DMG。`test:package`会检查架构、最低macOS版本、应用结构、Electron Fuses、asar边界和DMG可挂载性。
+`make:mac`会构建主进程、preload、两个SQLite Worker和React界面，然后生成ad-hoc签名的Apple Silicon应用和DMG。`test:package:mac`会检查架构、最低macOS版本、应用结构、Electron Fuses、asar边界和DMG可挂载性。
 
 构建产物位于：
 
@@ -228,6 +235,22 @@ npm run test:package
 - `out/make/弹幕看板-<version>-arm64.dmg`
 
 DMG生成和挂载验证需要macOS允许`hdiutil`访问系统设备接口。`out/`已经加入`.gitignore`，发布时应当把DMG作为GitHub Release附件上传，不要直接提交到Git历史。
+
+### 打包Windows x64便携版
+
+```bash
+npm run make:win
+npm run test:package:win
+```
+
+`make:win`生成带项目图标的x64 PE应用与便携ZIP。`test:package:win`检查PE架构、Electron Fuses、asar内容和ZIP；在Windows机器上还会实际运行SQLite双Worker自检与两万条smoke基准。
+
+构建产物位于：
+
+- `out/弹幕看板-win32-x64/弹幕看板.exe`
+- `out/make/zip/win32/x64/弹幕看板-win32-x64-<version>.zip`
+
+仓库的`Windows x64` GitHub Actions会在真实Windows Runner上执行快速验证、打包和产物验收，并保留14天可下载ZIP。
 
 ### 真实B站协议冒烟
 
@@ -239,13 +262,14 @@ BILIBILI_PROBE_DURATION_MS=15000 npm run test:live-protocol -- <公开直播间�
 
 ## 当前验证状态
 
-`v0.1.0`在2026-08-12的本机验证结果：
+`v0.1.0`在2026-08-12的验证结果：
 
 - Prettier、ESLint和TypeScript检查通过。
-- 23个单元测试文件，共52项测试通过。
+- 24个单元测试文件，共54项测试通过。
 - 1个SQLite集成测试文件，共4项测试通过。
 - 隐私扫描通过。
 - Apple Silicon `.app`与DMG生成成功，最终产物架构与挂载检查通过。
+- Windows x64便携ZIP交叉生成成功，PE、asar、Fuse和UTF-8文件名静态检查通过；Windows Runner的SQLite双Worker与smoke基准以GitHub Actions结果为准。
 - 渲染预览在宽窗口和700px窄窗口中没有水平溢出，浏览器控制台没有运行错误。
 
 持续采集、每秒200条事件和单场百万条事件的发布门槛与执行方式，详见[测试、诊断与脱敏日志规格](./docs/spec/testing-and-observability.md)。
@@ -256,12 +280,12 @@ BILIBILI_PROBE_DURATION_MS=15000 npm run test:live-protocol -- <公开直播间�
 - 采集使用平台公开网页协议，并非B站或抖音官方开放平台能力。上游协议变更后可能需要更新适配器。
 - 匿名访问可能被平台风险控制限制。程序会显示脱敏错误并保留已写入数据，不会要求输入Cookie继续访问。
 - 抖音第一版只保证普通弹幕。礼物、醒目留言、热度和观看人数目前不作为可用指标。
-- 第一版没有Intel Mac构建、Apple公证、自动更新、Mac App Store发布、多房间并发、Excel导出、时间轴回放或多场对比。
+- 第一版没有Intel Mac构建、Windows ARM64构建、发行签名、公证、自动更新、应用商店发布、多房间并发、Excel导出、时间轴回放或多场对比。
 - 这个工具不代表B站或抖音，也不提供对平台内容的访问授权。使用者需要自行遵守平台规则和所在地法律。
 
 ## 报告问题
 
-报告协议或采集问题时，请提供平台、界面显示的公开错误码、macOS版本和应用版本。不要在Issue中粘贴Cookie、临时令牌、设备标识、原始用户ID、本地数据库、完整网络帧或未脱敏弹幕。
+报告协议或采集问题时，请提供直播平台、界面显示的公开错误码、操作系统版本和应用版本。不要在Issue中粘贴Cookie、临时令牌、设备标识、原始用户ID、本地数据库、完整网络帧或未脱敏弹幕。
 
 ## 技术资料
 
@@ -272,6 +296,7 @@ BILIBILI_PROBE_DURATION_MS=15000 npm run test:live-protocol -- <公开直播间�
 - [抖音公开直播协议可行性研究](./docs/research/douyin-live-protocol-feasibility-2026-07-31.md)
 - [Electron进程与IPC契约](./docs/spec/electron-process-and-ipc.md)
 - [SQLite事件模型与本地存储](./docs/spec/event-model-and-sqlite.md)
+- [Windows x64打包与本地数据规格](./docs/spec/windows-x64-packaging-and-local-data.md)
 - [架构决策记录](./docs/adr/0001-electron-react-typescript-sqlite.md)
 - [棱镜编辑风界面设计](./docs/ui-20260812-prismatic-editorial-dashboard.md)
 

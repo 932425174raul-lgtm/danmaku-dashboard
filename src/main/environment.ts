@@ -10,6 +10,18 @@ export type LaunchMode =
 
 const ownedArgumentPrefixes = ['--verify-', '--benchmark-']
 
+export function getDesktopUserAgent(platform: NodeJS.Platform, chromeVersion: string): string {
+  const platformToken =
+    platform === 'darwin'
+      ? 'Macintosh; Intel Mac OS X 10_15_7'
+      : platform === 'win32'
+        ? 'Windows NT 10.0; Win64; x64'
+        : null
+
+  if (platformToken === null) throw new Error('UNSUPPORTED_DESKTOP_PLATFORM')
+  return `Mozilla/5.0 (${platformToken}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeVersion} Safari/537.36`
+}
+
 export function parseLaunchMode(argv: readonly string[]): LaunchMode {
   const ownedArguments = argv.filter((argument) =>
     ownedArgumentPrefixes.some((prefix) => argument.startsWith(prefix)),

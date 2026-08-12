@@ -1,5 +1,14 @@
 # 工作记录
 
+## 2026-08-12 Windows x64便携版
+
+- 新增Windows 10与Windows 11 x64运行边界，macOS与Windows共用采集、SQLite Worker、IPC和React界面。
+- B站与抖音桌面请求标识改为根据实际运行系统生成，Windows不再使用macOS标识。
+- Windows的Chromium会话数据放在`userData/Chromium`，持久数据继续使用Electron `userData`，密钥密文由DPAPI保护。
+- 新增ICO应用图标、Windows系统托盘图标、x64 PE打包、便携ZIP与产物检查。
+- 发现macOS系统`zip`会破坏中文文件名，改用显式写入UTF-8中央目录标志的项目内Windows ZIP maker。
+- GitHub Actions新增`windows-latest`构建，依次执行快速验证、Windows打包、运行时自检、两万条smoke基准和ZIP上传。
+
 ## 2026-08-12 棱镜编辑风界面重设计
 
 - 将原有黑绿网格、荧光描边和英文科技标签替换为哑光近黑、暖灰白文字与低对比石墨层。
